@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>D-day 카운터</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <style>
+    body {
+      background: linear-gradient(160deg, #0f3d1a 0%, #14401e 40%, #4a1212 75%, #7b1010 100%);
+      min-height: 100vh;
+    }
+
+    /* ====== 당일(D-Day) 빨간 글로우 펄스 ====== */
+    @keyframes xmas-glow {
+      0%, 100% {
+        transform: scale(1);
+        box-shadow: 0 0 22px -2px rgba(196, 30, 58, 0.7), 0 10px 25px -5px rgba(196, 30, 58, 0.6);
+      }
+      50% {
+        transform: scale(1.03);
+        box-shadow: 0 0 50px 4px rgba(255, 70, 90, 0.9), 0 18px 45px -5px rgba(196, 30, 58, 0.8);
+      }
+    }
+    .dday-today { animation: xmas-glow 1.6s ease-in-out infinite; }
+
+    /* ====== 골드 반짝임 ====== */
+    @keyframes gold-sparkle {
+      0%, 100% { opacity: 1; text-shadow: 0 0 12px rgba(212, 175, 55, 0.9), 0 0 4px rgba(255, 255, 255, 0.6); }
+      50%      { opacity: 0.55; text-shadow: 0 0 4px rgba(212, 175, 55, 0.4); }
+    }
+    .sparkle { animation: gold-sparkle 1.3s ease-in-out infinite; }
+
+    /* ====== 눈송이 낙하 ====== */
+    .snow-layer {
+      position: fixed;
+      inset: 0;
+      overflow: hidden;
+      pointer-events: none;
+      z-index: 0;
+    }
+    .snowflake {
+      position: absolute;
+      top: -10%;
+      color: #ffffff;
+      user-select: none;
+      will-change: transform;
+      opacity: 0.85;
+      animation-name: snow-fall;
+      animation-timing-function: linear;
+      animation-iteration-count: infinite;
+    }
+    @keyframes snow-fall {
+      0% {
+        transform: translateY(-10vh) translateX(0) rotate(0deg);
+        opacity: 0;
+      }
+      10% { opacity: 0.9; }
+      90% { opacity: 0.9; }
+      100% {
+        transform: translateY(110vh) translateX(40px) rotate(360deg);
+        opacity: 0;
+      }
+    }
+  </style>
+</head>
+<body>
+  <!-- 눈송이 배경 장식 (UI 방해 없음: pointer-events none) -->
+  <div class="snow-layer" aria-hidden="true">
+    <span class="snowflake" style="left:5%;  font-size:14px; animation-duration:9s;   animation-delay:0s;">❄</span>
+    <span class="snowflake" style="left:12%; font-size:22px; animation-duration:12s;  animation-delay:1.5s;">❄</span>
+    <span class="snowflake" style="left:20%; font-size:16px; animation-duration:8s;   animation-delay:3s;">❅</span>
+    <span class="snowflake" style="left:28%; font-size:12px; animation-duration:11s;  animation-delay:0.5s;">❆</span>
+    <span class="snowflake" style="left:36%; font-size:20px; animation-duration:10s;  animation-delay:2.2s;">❄</span>
+    <span class="snowflake" style="left:44%; font-size:14px; animation-duration:13s;  animation-delay:4s;">❅</span>
+    <span class="snowflake" style="left:52%; font-size:24px; animation-duration:9.5s; animation-delay:1s;">❄</span>
+    <span class="snowflake" style="left:60%; font-size:13px; animation-duration:7.5s; animation-delay:2.8s;">❆</span>
+    <span class="snowflake" style="left:68%; font-size:18px; animation-duration:12.5s;animation-delay:0.8s;">❄</span>
+    <span class="snowflake" style="left:76%; font-size:15px; animation-duration:10.5s;animation-delay:3.5s;">❅</span>
+    <span class="snowflake" style="left:84%; font-size:21px; animation-duration:8.8s; animation-delay:1.8s;">❄</span>
+    <span class="snowflake" style="left:91%; font-size:12px; animation-duration:11.8s;animation-delay:4.5s;">❆</span>
+    <span class="snowflake" style="left:97%; font-size:17px; animation-duration:9.8s; animation-delay:2.5s;">❄</span>
+  </div>
+
+  <div id="root" style="position: relative; z-index: 1;"></div>
+  <script type="text/babel">
+    const { useState, useEffect, useRef } = React;
+
+    // ========================================
+    // 유틸 함수 (기능 동일)
+    // ========================================
+    function diffDays(target, now) {
+      const t = new Date(target.getFullYear(), target.getMonth(), target.getDate());
+      const n = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      return Math.round((t - n) / (1000 * 60 * 60 * 24));
+    }
+    function ddayLabel(days) {
+      if (days > 0) return `D-${days}`;
+      if (days === 0) return "D-Day!";
+      return `D+${Math.abs(days)}`;
+    }
+    function pad(n) { return String(n).padStart(2, "0"); }
+    function timeUntil(target, now) {
+      const goal = new Date(target.getFullYear(), target.getMonth(), target.getDate(), 0, 0, 0);
+      let ms = goal - now;
+      if (ms < 0) ms = 0;
+      const totalSec = Math.floor(ms / 1000);
+      const h = Math.floor(totalSec / 3600);
+      const m = Math.floor((totalSec % 3600) / 60);
+      const s = totalSec % 60;
+      return { h, m, s };
+    }
+
+    // ========================================
+    // 🎨 디자인 시스템 컴포넌트
+    // ========================================
+    function Button({ variant = "primary", size = "md", className = "", children, ...rest }) {
+      const base = "rounded-xl font-semibold shadow-md transition focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-offset-transparent disabled:opacity-50 disabled:cursor-not-allowed";
+      const sizes = { sm: "px-3 py-1.5 text-sm", md: "px-4 py-3 text-base", lg: "px-6 py-4 text-lg" };
+      const variants = {
+        primary: "bg-gradient-to-r from-[#c41e3a] to-[#8b0000] text-white hover:from-[#e63950] hover:to-[#b00000] focus:ring-[#d4af37]",
+        ghost: "bg-white/10 text-[#d4af37] hover:bg-white/20 focus:ring-[#d4af37] border border-[#d4af37]/50",
+        danger: "bg-white/10 text-rose-300 hover:bg-rose-900/40 focus:ring-rose-400 border border-rose-400/40",
+      };
+      return (
+        <button className={`${base} ${sizes[size]} ${variants[variant]} ${className}`} {...rest}>
+          {children}
+        </button>
+      );
+    }
+
+    function Input({ label, error, className = "", ...rest }) {
+      return (
+        <div className={className}>
+          {label && <label className="mb-1.5 block text-sm font-medium text-[#d4af37]">{label}</label>}
+          <input
+            className={`w-full rounded-xl border-2 bg-[#0f3d1a]/40 px-4 py-3 text-base text-white placeholder-emerald-200/50 focus:outline-none focus:ring-2 focus:ring-[#d4af37] transition [color-scheme:dark] ${error ? "border-red-400" : "border-[#d4af37]/50"}`}
+            {...rest}
+          />
+          {error && <p className="mt-1.5 text-sm text-red-300">{error}</p>}
+        </div>
+      );
+    }
+
+    // ========================================
+    // 🧩 D-day 카드
+    // ========================================
+    function DDayCard({ item, now, onDelete }) {
+      const target = new Date(item.date + "T00:00:00");
+      const days = diffDays(target, now);
+      const isToday = days === 0;
+      const isPast = days < 0;
+      const isFuture = days > 0;
+      const { h, m, s } = timeUntil(target, now);
+
+      // 미래: 짙은 초록 반투명 + 골드 테두리 / 당일: 빨간 글로우 / 지난: 회색 다크
+      let cardClass = "bg-[#1a4d2e]/80 border-[#d4af37]/60 backdrop-blur";
+      let labelClass = "text-[#d4af37]";
+      if (isToday) {
+        cardClass = "dday-today bg-gradient-to-br from-[#c41e3a] to-[#8b0000] border-[#ffd700] text-white";
+        labelClass = "text-white";
+      } else if (isPast) {
+        cardClass = "bg-gray-800/70 border-gray-600/50 opacity-70 backdrop-blur";
+        labelClass = "text-gray-300";
+      }
+
+      const formattedDate = `${target.getFullYear()}년 ${target.getMonth() + 1}월 ${target.getDate()}일`;
+
+      return (
+        <div className={`relative rounded-3xl border p-6 shadow-2xl transition ${cardClass}`}>
+          <button
+            onClick={() => onDelete(item.id)}
+            aria-label="삭제"
+            className={`absolute right-3 top-3 flex h-7 w-7 items-center justify-center rounded-full text-lg leading-none transition hover:scale-110 ${isToday ? "bg-white/25 text-white hover:bg-white/45" : "bg-black/30 text-[#d4af37] hover:bg-black/50"}`}
+          >
+            ×
+          </button>
+          <p className={`pr-8 text-base font-semibold ${isToday ? "text-white" : isPast ? "text-gray-300" : "text-emerald-50"}`}>
+            {item.label}
+          </p>
+          <p className={`mt-0.5 text-xs ${isToday ? "text-white/80" : isPast ? "text-gray-400" : "text-emerald-200/70"}`}>
+            {formattedDate}
+          </p>
+          <div className="mt-4 text-center">
+            <p className={`text-5xl font-extrabold tracking-tight ${labelClass} ${isToday ? "sparkle" : ""}`}>
+              {ddayLabel(days)}
+            </p>
+            {isToday && <p className="mt-2 text-lg font-medium text-white">🎄 오늘이에요! 🎅</p>}
+            {isFuture && (
+              <div className="mt-3">
+                <p className="text-xs font-medium text-emerald-200/70">자정까지 남은 시간</p>
+                <p className="mt-1 font-mono text-2xl font-bold text-[#d4af37] tabular-nums">
+                  {pad(h)}:{pad(m)}:{pad(s)}
+                </p>
+              </div>
+            )}
+            {isPast && <p className="mt-2 text-sm text-gray-400">{Math.abs(days)}일 지났어요</p>}
+          </div>
+        </div>
+      );
+    }
+
+    // ========================================
+    // 🚀 App
+    // ========================================
+    function DDayApp() {
+      const [items, setItems] = useState([]);
+      const [label, setLabel] = useState("");
+      const [date, setDate] = useState("");
+      const [error, setError] = useState("");
+      const [now, setNow] = useState(new Date());
+      const idRef = useRef(1);
+
+      useEffect(() => {
+        const timer = setInterval(() => setNow(new Date()), 1000);
+        return () => clearInterval(timer);
+      }, []);
+
+      const handleAdd = () => {
+        if (!label.trim()) { setError("이벤트 이름을 입력해 주세요."); return; }
+        if (!date) { setError("목표 날짜를 선택해 주세요."); return; }
+        const target = new Date(date + "T00:00:00");
+        if (isNaN(target.getTime())) { setError("올바른 날짜를 선택해 주세요."); return; }
+        setError("");
+        setItems(prev => [...prev, { id: idRef.current++, label: label.trim(), date }]);
+        setLabel("");
+        setDate("");
+      };
+
+      const handleDelete = (id) => setItems(prev => prev.filter(it => it.id !== id));
+      const handleKeyDown = (e) => { if (e.key === "Enter") handleAdd(); };
+
+      const sorted = [...items].sort((a, b) => {
+        const da = diffDays(new Date(a.date + "T00:00:00"), now);
+        const db = diffDays(new Date(b.date + "T00:00:00"), now);
+        return da - db;
+      });
+
+      return (
+        <div className="min-h-screen px-4 py-10">
+          <div className="mx-auto w-full max-w-4xl">
+            <div className="mb-8 text-center">
+              <h1 className="text-3xl font-bold text-white drop-shadow-[0_2px_8px_rgba(196,30,58,0.6)] sm:text-4xl">🎄 D-day 카운터</h1>
+              <p className="mt-2 text-sm text-[#d4af37]">메리 크리스마스! 소중한 날들을 세어봐요</p>
+            </div>
+            <div className="mb-10 rounded-3xl border border-[#d4af37]/50 bg-[#1a4d2e]/70 p-6 shadow-2xl backdrop-blur sm:p-8">
+              <div className="grid gap-4 sm:grid-cols-2">
+                <Input label="이벤트 이름" type="text" placeholder="예: 크리스마스, 시험일" value={label} onChange={e => { setLabel(e.target.value); if (error) setError(""); }} onKeyDown={handleKeyDown} />
+                <Input label="목표 날짜" type="date" value={date} onChange={e => { setDate(e.target.value); if (error) setError(""); }} onKeyDown={handleKeyDown} />
+              </div>
+              {error && <p className="mt-3 text-sm text-red-300">{error}</p>}
+              <Button className="mt-5 w-full" onClick={handleAdd}>추가하기 🎁</Button>
+            </div>
+            {sorted.length === 0 ? (
+              <div className="rounded-3xl border border-dashed border-[#d4af37]/50 bg-[#1a4d2e]/40 p-12 text-center backdrop-blur">
+                <p className="text-4xl">🎁</p>
+                <p className="mt-3 text-emerald-50">아직 등록된 D-day가 없어요.</p>
+                <p className="mt-1 text-sm text-emerald-200/70">첫 번째 이벤트를 추가해 보세요!</p>
+              </div>
+            ) : (
+              <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+                {sorted.map(item => <DDayCard key={item.id} item={item} now={now} onDelete={handleDelete} />)}
+              </div>
+            )}
+            <p className="mt-10 text-center text-xs text-[#d4af37]/80">D-day와 남은 시간은 매초 자동으로 갱신됩니다. 🎅</p>
+          </div>
+        </div>
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById("root")).render(<DDayApp />);
+  </script>
+</body>
+</html>

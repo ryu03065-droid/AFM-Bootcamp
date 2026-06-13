@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>React 기초 데모 🚀 - Week 2</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <style>
+    /* ✨ Tailwind으로 표현하기 어려운 애니메이션만 직접 정의 */
+    @keyframes float {
+      0%, 100% { transform: translateY(0); }
+      50% { transform: translateY(-8px); }
+    }
+    .animate-float { animation: float 2.5s ease-in-out infinite; }
+
+    @keyframes pop {
+      0% { transform: scale(0.7); opacity: 0; }
+      60% { transform: scale(1.15); }
+      100% { transform: scale(1); opacity: 1; }
+    }
+    .animate-pop { animation: pop 0.35s ease-out; }
+
+    @keyframes gradient-shift {
+      0% { background-position: 0% 50%; }
+      50% { background-position: 100% 50%; }
+      100% { background-position: 0% 50%; }
+    }
+    .animate-gradient {
+      background-size: 200% 200%;
+      animation: gradient-shift 12s ease infinite;
+    }
+  </style>
+</head>
+<body class="min-h-screen animate-gradient bg-gradient-to-br from-fuchsia-500 via-purple-500 to-indigo-600">
+  <div id="root"></div>
+  <script type="text/babel">
+    const { useState } = React;
+
+    // ========================================
+    // 🎨 디자인 시스템 컴포넌트
+    // ========================================
+
+    function Button({ variant = "primary", size = "md", onClick, children, className = "" }) {
+      const variants = {
+        primary: "bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 text-white shadow-lg shadow-purple-500/30",
+        secondary: "bg-gradient-to-r from-slate-100 to-slate-200 hover:from-slate-200 hover:to-slate-300 text-slate-700 shadow-md",
+        danger: "bg-gradient-to-r from-rose-500 to-pink-600 hover:from-rose-600 hover:to-pink-700 text-white shadow-lg shadow-pink-500/30",
+        success: "bg-gradient-to-r from-emerald-400 to-teal-500 hover:from-emerald-500 hover:to-teal-600 text-white shadow-lg shadow-teal-500/30",
+      };
+      const sizes = {
+        sm: "px-4 py-1.5 text-sm",
+        md: "px-5 py-2 text-base",
+        lg: "px-7 py-3 text-lg",
+      };
+      return (
+        <button
+          onClick={onClick}
+          className={`rounded-full font-bold transition-all duration-200 hover:-translate-y-0.5 active:translate-y-0 active:scale-95 focus:outline-none focus:ring-4 focus:ring-white/40 ${variants[variant]} ${sizes[size]} ${className}`}
+        >
+          {children}
+        </button>
+      );
+    }
+
+    function Card({ title, emoji, stripFrom, stripTo, children, className = "" }) {
+      return (
+        <div className={`bg-white rounded-3xl shadow-2xl shadow-purple-900/20 overflow-hidden ${className}`}>
+          {title && (
+            <div className={`bg-gradient-to-r ${stripFrom} ${stripTo} px-6 py-4`}>
+              <h2 className="text-xl font-extrabold text-white flex items-center gap-2 drop-shadow">
+                <span className="text-2xl">{emoji}</span>
+                {title}
+              </h2>
+            </div>
+          )}
+          <div className="p-6">
+            {children}
+          </div>
+        </div>
+      );
+    }
+
+    // ========================================
+    // 📄 섹션 컴포넌트
+    // ========================================
+
+    function CounterSection() {
+      const [count, setCount] = useState(0);
+
+      // 🙂 숫자 값에 따라 바뀌는 무드 이모지
+      const getMood = (n) => {
+        if (n >= 10) return { emoji: "🎉", label: "최고예요!", color: "text-emerald-500" };
+        if (n > 0) return { emoji: "😊", label: "기분 좋아요", color: "text-indigo-600" };
+        if (n === 0) return { emoji: "😐", label: "중립 상태", color: "text-slate-500" };
+        return { emoji: "😢", label: "마이너스...", color: "text-rose-500" };
+      };
+      const mood = getMood(count);
+
+      return (
+        <Card title="카운터 (useState)" emoji="🔢" stripFrom="from-indigo-500" stripTo="to-purple-600">
+          <p className="text-slate-500 text-sm mb-5">
+            버튼을 누르면 <code className="bg-purple-100 text-purple-700 px-1.5 py-0.5 rounded font-semibold">useState</code>로 저장된 숫자가 바뀌고, 이모지도 함께 변해요! 🪄
+          </p>
+          <div className="flex flex-col items-center gap-3 mb-6">
+            <div key={count} className="animate-pop text-7xl animate-float">{mood.emoji}</div>
+            <span className={`text-6xl font-black tabular-nums ${mood.color} transition-colors`}>{count}</span>
+            <span className={`text-sm font-semibold ${mood.color}`}>{mood.label}</span>
+          </div>
+          <div className="flex items-center justify-center gap-3 mb-4">
+            <Button variant="danger" size="lg" onClick={() => setCount(count - 1)}>➖ 빼기</Button>
+            <Button variant="success" size="lg" onClick={() => setCount(count + 1)}>➕ 더하기</Button>
+          </div>
+          <div className="text-center">
+            <Button variant="secondary" size="sm" onClick={() => setCount(0)}>🔄 초기화</Button>
+          </div>
+        </Card>
+      );
+    }
+
+    function LiveTextSection() {
+      const [text, setText] = useState("");
+
+      // 💬 글자 수에 따라 바뀌는 무드 이모지
+      const getTextMood = (len) => {
+        if (len === 0) return { emoji: "✍️", label: "입력을 기다리는 중..." };
+        if (len < 10) return { emoji: "🙂", label: "좋은 시작이에요!" };
+        if (len < 30) return { emoji: "😃", label: "점점 길어지네요!" };
+        if (len < 60) return { emoji: "🤩", label: "이야기꾼이군요!" };
+        return { emoji: "🔥", label: "대단한 열정이에요!" };
+      };
+      const textMood = getTextMood(text.length);
+
+      return (
+        <Card title="라이브 텍스트 미리보기" emoji="💬" stripFrom="from-pink-500" stripTo="to-rose-500">
+          <p className="text-slate-500 text-sm mb-5">
+            입력값이 곧바로 <code className="bg-pink-100 text-pink-700 px-1.5 py-0.5 rounded font-semibold">state</code>에 반영되어 아래에 실시간으로 보여요! ⚡
+          </p>
+          <label htmlFor="liveInput" className="block text-sm font-bold text-slate-700 mb-1.5">
+            ✏️ 메시지를 입력하세요
+          </label>
+          <input
+            id="liveInput"
+            type="text"
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            placeholder="여기에 입력해 보세요... 😎"
+            className="w-full border-2 border-pink-200 rounded-2xl px-4 py-2.5 mb-5 focus:outline-none focus:ring-4 focus:ring-pink-300/50 focus:border-pink-400 transition"
+          />
+          <div className="bg-gradient-to-br from-pink-50 to-purple-50 border-2 border-dashed border-pink-300 rounded-2xl p-4 min-h-[80px]">
+            <span className="text-xs font-bold text-pink-400 flex items-center gap-1 mb-1.5">
+              👀 미리보기 <span>{textMood.emoji}</span>
+            </span>
+            {text ? (
+              <p className="text-slate-800 break-words font-medium">{text}</p>
+            ) : (
+              <p className="text-slate-400 italic">아직 입력된 내용이 없어요. 🫥</p>
+            )}
+          </div>
+          <div className="flex items-center justify-between mt-3">
+            <span className="text-xs font-semibold text-pink-500">{textMood.emoji} {textMood.label}</span>
+            <span className="text-xs font-bold text-slate-400 bg-slate-100 px-2.5 py-1 rounded-full">
+              📏 글자 수: {text.length}
+            </span>
+          </div>
+        </Card>
+      );
+    }
+
+    // ========================================
+    // 🚀 App 컴포넌트
+    // ========================================
+
+    function App() {
+      return (
+        <div className="max-w-xl mx-auto px-4 py-12">
+          <header className="text-center mb-10">
+            <div className="text-6xl mb-3 animate-float">🚀</div>
+            <h1 className="text-4xl font-black text-white drop-shadow-lg">
+              React 기초 데모 ⚛️
+            </h1>
+            <p className="text-purple-100 mt-3 font-medium">
+              ✨ Week 2 · useState와 제어 컴포넌트 배우기 ✨
+            </p>
+          </header>
+          <div className="space-y-7">
+            <CounterSection />
+            <LiveTextSection />
+          </div>
+          <footer className="text-center text-xs text-purple-100 mt-12 font-medium">
+            🛠️ CDN 기반 React 18 · 🎨 Tailwind CSS · 📦 빌드 도구 없음 💜
+          </footer>
+        </div>
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+  </script>
+</body>
+</html>

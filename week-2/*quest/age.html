@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>만 나이 계산기</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <style>
+    body { background: linear-gradient(135deg, #fce4ec 0%, #f8bbd0 50%, #ffd1dc 100%); }
+    #confetti-canvas { position: fixed; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 999; }
+  </style>
+</head>
+<body>
+  <canvas id="confetti-canvas"></canvas>
+  <div id="root"></div>
+  <script type="text/babel">
+    const { useState, useEffect, useRef } = React;
+
+    // ── Confetti ──────────────────────────────────────────────
+    function launchConfetti() {
+      const canvas = document.getElementById("confetti-canvas");
+      const ctx = canvas.getContext("2d");
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+
+      const colors = ["#f472b6","#ec4899","#fb7185","#fda4af","#ff80ab","#ff4081","#f9a8d4","#fbbf24","#a78bfa"];
+      const particles = Array.from({ length: 180 }, () => ({
+        x: Math.random() * canvas.width,
+        y: Math.random() * canvas.height - canvas.height,
+        r: Math.random() * 7 + 3,
+        d: Math.random() * 180 + 20,
+        color: colors[Math.floor(Math.random() * colors.length)],
+        tilt: Math.floor(Math.random() * 10) - 10,
+        tiltAngle: 0,
+        tiltSpeed: Math.random() * 0.1 + 0.05,
+      }));
+
+      let frame;
+      let elapsed = 0;
+
+      function draw() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        particles.forEach(p => {
+          ctx.beginPath();
+          ctx.lineWidth = p.r;
+          ctx.strokeStyle = p.color;
+          ctx.moveTo(p.x + p.tilt + p.r / 4, p.y);
+          ctx.lineTo(p.x + p.tilt, p.y + p.tilt + p.r / 4);
+          ctx.stroke();
+        });
+        update();
+      }
+
+      function update() {
+        elapsed++;
+        particles.forEach(p => {
+          p.tiltAngle += p.tiltSpeed;
+          p.y += (Math.cos(p.d) + 2 + p.r / 2) * 0.9;
+          p.x += Math.sin(elapsed * 0.01 + p.d) * 1.5;
+          p.tilt = Math.sin(p.tiltAngle) * 12;
+        });
+      }
+
+      function loop() {
+        draw();
+        if (elapsed < 220) {
+          frame = requestAnimationFrame(loop);
+        } else {
+          ctx.clearRect(0, 0, canvas.width, canvas.height);
+        }
+      }
+
+      cancelAnimationFrame(frame);
+      elapsed = 0;
+      loop();
+    }
+
+    // ── Age calc ──────────────────────────────────────────────
+    function calcKoreanAge(birth, today) {
+      let age = today.getFullYear() - birth.getFullYear();
+      const md = today.getMonth() - birth.getMonth();
+      const dd = today.getDate() - birth.getDate();
+      if (md < 0 || (md === 0 && dd < 0)) age -= 1;
+      return age;
+    }
+
+    // ── App ───────────────────────────────────────────────────
+    function AgeCalculator() {
+      const TODAY = new Date(2026, 5, 13);
+      const [birthdate, setBirthdate] = useState("");
+      const [result, setResult] = useState(null);
+      const [error, setError] = useState("");
+
+      const handleCalculate = () => {
+        setResult(null);
+        if (!birthdate) { setError("생년월일을 입력해 주세요."); return; }
+        const birth = new Date(birthdate);
+        if (isNaN(birth.getTime())) { setError("올바른 날짜를 입력해 주세요."); return; }
+        if (birth > TODAY) { setError("생년월일이 오늘보다 미래일 수 없습니다."); return; }
+        setError("");
+        setResult(calcKoreanAge(birth, TODAY));
+      };
+
+      useEffect(() => {
+        if (result !== null) launchConfetti();
+      }, [result]);
+
+      return (
+        <div className="flex min-h-screen items-center justify-center px-4 py-10">
+          <div className="w-full max-w-md">
+            <div className="mb-6 text-center">
+              <h1 className="text-3xl font-bold text-pink-700 drop-shadow">🎀 만 나이 계산기</h1>
+              <p className="mt-2 text-sm text-pink-400">오늘 날짜 기준: 2026년 6월 13일</p>
+            </div>
+
+            <div className="rounded-3xl bg-white/80 backdrop-blur p-6 shadow-xl sm:p-8 border border-pink-200">
+              <div className="space-y-5">
+                {/* Label */}
+                <div>
+                  <label className="mb-1.5 block text-sm font-medium text-pink-600">생년월일 입력</label>
+                  <input
+                    type="date"
+                    value={birthdate}
+                    max="2026-06-13"
+                    onChange={e => { setBirthdate(e.target.value); if (error) setError(""); }}
+                    className={`w-full rounded-xl border-2 px-4 py-3 text-base text-pink-900 focus:outline-none focus:ring-2 focus:ring-pink-400 transition ${error ? "border-red-400" : "border-pink-300"}`}
+                  />
+                  {error && <p className="mt-1.5 text-sm text-red-500">{error}</p>}
+                </div>
+
+                {/* Button */}
+                <button
+                  onClick={handleCalculate}
+                  className="w-full rounded-xl bg-gradient-to-r from-pink-400 to-rose-400 px-4 py-3 text-base font-semibold text-white shadow-md hover:from-pink-500 hover:to-rose-500 transition focus:outline-none focus:ring-2 focus:ring-pink-300 focus:ring-offset-2"
+                >
+                  나이 계산하기 🎉
+                </button>
+
+                {/* Result */}
+                {result !== null && (
+                  <div className="rounded-2xl bg-gradient-to-br from-pink-100 to-rose-100 border border-pink-200 p-6 text-center shadow-inner">
+                    <p className="text-sm font-medium text-pink-500">당신의 만 나이는</p>
+                    <p className="mt-1 text-5xl font-extrabold text-pink-600">
+                      만 {result}세
+                    </p>
+                    <p className="mt-2 text-lg">🎊🎀🎊</p>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <p className="mt-6 text-center text-xs text-pink-300">
+              만 나이는 생일이 지났는지에 따라 자동으로 계산됩니다.
+            </p>
+          </div>
+        </div>
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById("root")).render(<AgeCalculator />);
+  </script>
+</body>
+</html>
