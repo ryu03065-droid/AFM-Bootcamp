@@ -1,0 +1,1151 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Tranquil — ASMR Ambient Sound Mixer</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;1,500&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg-top: #050d1a;
+      --bg-bottom: #0d1f2d;
+    }
+    html, body { margin: 0; padding: 0; }
+    body {
+      font-family: 'Inter', system-ui, sans-serif;
+      background: radial-gradient(ellipse at 50% -10%, #0d1f2d 0%, #050d1a 60%);
+      color: #e2e8f0;
+      overflow-x: hidden;
+      min-height: 100vh;
+    }
+    .font-display { font-family: 'Playfair Display', serif; }
+
+    /* ===== Aurora background ===== */
+    .aurora {
+      position: fixed; inset: 0; z-index: 0; overflow: hidden; pointer-events: none;
+    }
+    .aurora::before, .aurora::after {
+      content: ""; position: absolute; border-radius: 50%;
+      filter: blur(90px); opacity: 0.30; mix-blend-mode: screen;
+    }
+    .aurora::before {
+      width: 60vw; height: 60vw; left: -10vw; top: -20vh;
+      background: radial-gradient(circle, #38bdf8, transparent 65%);
+      animation: drift1 26s ease-in-out infinite alternate;
+    }
+    .aurora::after {
+      width: 55vw; height: 55vw; right: -15vw; bottom: -25vh;
+      background: radial-gradient(circle, #5eead4, transparent 65%);
+      animation: drift2 32s ease-in-out infinite alternate;
+    }
+    @keyframes drift1 {
+      0%   { transform: translate(0,0) scale(1); }
+      100% { transform: translate(8vw, 10vh) scale(1.15); }
+    }
+    @keyframes drift2 {
+      0%   { transform: translate(0,0) scale(1.1); }
+      100% { transform: translate(-6vw, -8vh) scale(1); }
+    }
+
+    /* ===== Stars ===== */
+    .stars { position: fixed; inset: 0; z-index: 0; pointer-events: none; }
+    .star {
+      position: absolute; border-radius: 50%; background: #fff;
+      animation: twinkle linear infinite;
+    }
+    @keyframes twinkle {
+      0%, 100% { opacity: 0.15; }
+      50%      { opacity: 0.85; }
+    }
+
+    /* ===== Glass card ===== */
+    .glass {
+      background: rgba(255,255,255,0.04);
+      backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
+      border: 1px solid rgba(255,255,255,0.08);
+    }
+
+    /* breathing circle */
+    @keyframes breathe {
+      0%, 100% { transform: scale(0.78); opacity: 0.55; }
+      50%      { transform: scale(1.12); opacity: 1; }
+    }
+    .breathe { animation: breathe 8s ease-in-out infinite; }
+
+    /* active card pulse */
+    @keyframes pulseGlow {
+      0%, 100% { box-shadow: 0 0 0 0 var(--glow-a), 0 12px 40px -12px var(--glow-b); }
+      50%      { box-shadow: 0 0 0 6px var(--glow-c), 0 18px 60px -10px var(--glow-b); }
+    }
+    .active-pulse { animation: pulseGlow 4.5s ease-in-out infinite; }
+
+    /* ===== Range slider ===== */
+    input[type="range"] {
+      -webkit-appearance: none; appearance: none;
+      width: 100%; height: 4px; border-radius: 999px; outline: none;
+      background: rgba(255,255,255,0.12); cursor: pointer;
+      transition: background 0.3s ease;
+    }
+    input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none; appearance: none;
+      width: 15px; height: 15px; border-radius: 50%;
+      background: var(--thumb, #5eead4);
+      box-shadow: 0 0 10px var(--thumb, #5eead4);
+      transition: transform 0.2s ease; border: none;
+    }
+    input[type="range"]::-webkit-slider-thumb:hover { transform: scale(1.25); }
+    input[type="range"]::-moz-range-thumb {
+      width: 15px; height: 15px; border-radius: 50%; border: none;
+      background: var(--thumb, #5eead4); box-shadow: 0 0 10px var(--thumb, #5eead4);
+    }
+
+    select {
+      background-color: rgba(255,255,255,0.05);
+      color: #e2e8f0; border: 1px solid rgba(255,255,255,0.12);
+    }
+    select option { background: #0d1f2d; color: #e2e8f0; }
+
+    ::-webkit-scrollbar { width: 8px; }
+    ::-webkit-scrollbar-thumb { background: rgba(94,234,212,0.25); border-radius: 999px; }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="text/babel">
+    const { useState, useEffect, useRef, useCallback, useMemo } = React;
+
+    // ========================================
+    // 🔊 Noise buffer generators
+    // ========================================
+    // White: uniform random. Pink: Paul Kellet refined filter.
+    // Brown: leaky integration of white. All return mono looping buffers.
+
+    function makeWhiteBuffer(ctx, seconds) {
+      const len = Math.floor(ctx.sampleRate * seconds);
+      const buffer = ctx.createBuffer(1, len, ctx.sampleRate);
+      const d = buffer.getChannelData(0);
+      for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
+      return buffer;
+    }
+
+    function makePinkBuffer(ctx, seconds) {
+      const len = Math.floor(ctx.sampleRate * seconds);
+      const buffer = ctx.createBuffer(1, len, ctx.sampleRate);
+      const d = buffer.getChannelData(0);
+      let b0=0,b1=0,b2=0,b3=0,b4=0,b5=0,b6=0;
+      for (let i = 0; i < len; i++) {
+        const w = Math.random() * 2 - 1;
+        b0 = 0.99886*b0 + w*0.0555179;
+        b1 = 0.99332*b1 + w*0.0750759;
+        b2 = 0.96900*b2 + w*0.1538520;
+        b3 = 0.86650*b3 + w*0.3104856;
+        b4 = 0.55000*b4 + w*0.5329522;
+        b5 = -0.7616*b5 - w*0.0168980;
+        d[i] = (b0+b1+b2+b3+b4+b5+b6 + w*0.5362) * 0.11;
+        b6 = w * 0.115926;
+      }
+      return buffer;
+    }
+
+    function makeBrownBuffer(ctx, seconds) {
+      const len = Math.floor(ctx.sampleRate * seconds);
+      const buffer = ctx.createBuffer(1, len, ctx.sampleRate);
+      const d = buffer.getChannelData(0);
+      let b = 0;
+      for (let i = 0; i < len; i++) {
+        const w = Math.random() * 2 - 1;
+        b = (b + 0.02 * w) / 1.02;
+        d[i] = b * 3.5;
+      }
+      return buffer;
+    }
+
+    // Small helpers ------------------------------------------------------------
+    function noiseSource(ctx, buffer) {
+      const src = ctx.createBufferSource();
+      src.buffer = buffer;
+      src.loop = true;
+      return src;
+    }
+    function biquad(ctx, type, freq, q) {
+      const f = ctx.createBiquadFilter();
+      f.type = type;
+      f.frequency.value = freq;
+      if (q != null) f.Q.value = q;
+      return f;
+    }
+    function gain(ctx, v) {
+      const g = ctx.createGain();
+      g.gain.value = v;
+      return g;
+    }
+    function lfo(ctx, freq) {
+      const o = ctx.createOscillator();
+      o.frequency.value = freq;
+      return o;
+    }
+    const rand = (a, b) => a + Math.random() * (b - a);
+
+    // ========================================
+    // 🔊 Audio Engine — each sound builds a distinct procedural graph
+    // ========================================
+    function createAudioEngine() {
+      let ctx = null;
+      let master = null;
+      const sounds = {}; // id -> { gain, stoppers:[], timers:[] }
+
+      function ensureCtx() {
+        if (!ctx) ctx = new (window.AudioContext || window.webkitAudioContext)();
+        if (ctx.state === 'suspended') ctx.resume();
+        return ctx;
+      }
+      function ensureMaster() {
+        ensureCtx();
+        if (!master) {
+          master = ctx.createGain();
+          master.gain.value = 0.8;
+          master.connect(ctx.destination);
+        }
+        return master;
+      }
+
+      // Each builder returns an array of "stoppers": objects with a stop() method
+      // (OscillatorNode / AudioBufferSourceNode have stop natively; for timers we
+      // wrap clearTimeout/clearInterval in a {stop} object).
+      const builders = {
+
+        // 🌊 OCEAN — overlapping irregular waves + deep rumble + hiss + stereo + spray
+        ocean(out) {
+          const stoppers = [];
+
+          // --- Deep rumble bed: brown noise heavily lowpassed ---
+          const brown = noiseSource(ctx, makeBrownBuffer(ctx, 6));
+          const rumbleLp = biquad(ctx, 'lowpass', 400, 0.7);
+
+          // --- Hiss layer: white noise through bandpass 1500-3000 (water over sand) ---
+          const hiss = noiseSource(ctx, makeWhiteBuffer(ctx, 4));
+          const hissBp = biquad(ctx, 'bandpass', 2200, 1.2);
+          const hissGain = gain(ctx, 0);
+
+          // --- Stereo panner driven by slow LFO so waves move across the field ---
+          const panner = ctx.createStereoPanner();
+          const panLfo = lfo(ctx, 0.03);
+          const panAmt = gain(ctx, 0.85);
+          panLfo.connect(panAmt); panAmt.connect(panner.pan);
+
+          // --- Three overlapping wave gains, each modulated by its own LFO at a
+          //     different rate so wave timing is irregular ---
+          const waveRates = [0.08, 0.13, 0.07];
+          waveRates.forEach((rate, i) => {
+            const wGain = gain(ctx, 0.18);
+            const wLfo = lfo(ctx, rate);
+            const wDepth = gain(ctx, 0.16);
+            wLfo.connect(wDepth); wDepth.connect(wGain.gain);
+            // each wave taps the rumble + a bit of hiss tied to wave swell
+            brown.connect(rumbleLp);
+            rumbleLp.connect(wGain);
+            wGain.connect(panner);
+            // hiss swells with the wave crest
+            const hissTap = gain(ctx, 0.06);
+            const hLfo = lfo(ctx, rate);
+            const hDepth = gain(ctx, 0.06);
+            hLfo.connect(hDepth); hDepth.connect(hissTap.gain);
+            hiss.connect(hissBp); hissBp.connect(hissTap); hissTap.connect(panner);
+            wLfo.start(); hLfo.start();
+            stoppers.push(wLfo, hLfo);
+          });
+
+          panner.connect(out);
+          brown.start(); hiss.start(); panLfo.start();
+          stoppers.push(brown, hiss, panLfo);
+
+          // --- Spray: occasional brief white-noise burst at random intervals ---
+          let sprayTimer;
+          const spray = () => {
+            const sb = ctx.createBufferSource();
+            sb.buffer = makeWhiteBuffer(ctx, 0.12);
+            const sbp = biquad(ctx, 'bandpass', rand(2500, 4500), 0.8);
+            const sg = ctx.createGain();
+            const t = ctx.currentTime;
+            sg.gain.setValueAtTime(0, t);
+            sg.gain.linearRampToValueAtTime(rand(0.08, 0.16), t + 0.02);
+            sg.gain.exponentialRampToValueAtTime(0.0008, t + rand(0.06, 0.1));
+            sb.connect(sbp); sbp.connect(sg); sg.connect(panner);
+            sb.start(t); sb.stop(t + 0.15);
+            sprayTimer = setTimeout(spray, rand(3000, 8000));
+          };
+          sprayTimer = setTimeout(spray, rand(2000, 5000));
+          stoppers.push({ stop(){ clearTimeout(sprayTimer); } });
+
+          return stoppers;
+        },
+
+        // 🌧️ RAIN — layered drizzle + medium rain + leaf surface + random heavy drops
+        rain(out) {
+          const stoppers = [];
+
+          // --- Fine drizzle: white noise, highpass 3000, low gain ---
+          const drizzle = noiseSource(ctx, makeWhiteBuffer(ctx, 4));
+          const drizzleHp = biquad(ctx, 'highpass', 3000, 0.7);
+          const drizzleG = gain(ctx, 0.16);
+          drizzle.connect(drizzleHp); drizzleHp.connect(drizzleG); drizzleG.connect(out);
+
+          // --- Medium rain body: white noise bandpass 800-3000 ---
+          const medium = noiseSource(ctx, makeWhiteBuffer(ctx, 4));
+          const mediumBp = biquad(ctx, 'bandpass', 1600, 0.6);
+          const mediumG = gain(ctx, 0.30);
+          medium.connect(mediumBp); mediumBp.connect(mediumG); mediumG.connect(out);
+
+          // --- Leaf surface: pink noise with a resonant 200Hz peak ---
+          const leaf = noiseSource(ctx, makePinkBuffer(ctx, 5));
+          const leafPeak = biquad(ctx, 'peaking', 200, 4);
+          leafPeak.gain.value = 8;
+          const leafLp = biquad(ctx, 'lowpass', 1200, 0.7);
+          const leafG = gain(ctx, 0.12);
+          leaf.connect(leafPeak); leafPeak.connect(leafLp); leafLp.connect(leafG); leafG.connect(out);
+
+          drizzle.start(); medium.start(); leaf.start();
+          stoppers.push(drizzle, medium, leaf);
+
+          // --- Random individual heavy drops via setTimeout chain ---
+          let dropTimer;
+          const drop = () => {
+            const db = ctx.createBufferSource();
+            db.buffer = makeWhiteBuffer(ctx, 0.06);
+            const dbp = biquad(ctx, 'bandpass', rand(400, 2000), 3);
+            const dg = ctx.createGain();
+            const t = ctx.currentTime;
+            dg.gain.setValueAtTime(0, t);
+            dg.gain.linearRampToValueAtTime(rand(0.10, 0.22), t + 0.003);
+            dg.gain.exponentialRampToValueAtTime(0.0008, t + rand(0.02, 0.05));
+            db.connect(dbp); dbp.connect(dg); dg.connect(out);
+            db.start(t); db.stop(t + 0.08);
+            dropTimer = setTimeout(drop, rand(100, 300));
+          };
+          drop();
+          stoppers.push({ stop(){ clearTimeout(dropTimer); } });
+
+          return stoppers;
+        },
+
+        // 🌲 FOREST — wind in leaves + bird chirps + deep hum + insect texture
+        forest(out) {
+          const stoppers = [];
+
+          // --- Wind in leaves: pink noise through sweeping bandpass (primary) ---
+          const wind = noiseSource(ctx, makePinkBuffer(ctx, 6));
+          const windBp = biquad(ctx, 'bandpass', 1650, 0.8); // center of 800-2500
+          const windG = gain(ctx, 0.42);
+          const windLfo = lfo(ctx, 0.05);
+          const windDepth = gain(ctx, 850); // sweeps ~800..2500
+          windLfo.connect(windDepth); windDepth.connect(windBp.frequency);
+          wind.connect(windBp); windBp.connect(windG); windG.connect(out);
+
+          // --- Deep forest hum: subtle low sine for "aliveness" ---
+          const hum = ctx.createOscillator(); hum.type = 'sine'; hum.frequency.value = 70;
+          const humG = gain(ctx, 0.02);
+          hum.connect(humG); humG.connect(out);
+
+          // --- Insect / cicada texture: very high bandpass noise, low gain ---
+          const insect = noiseSource(ctx, makeWhiteBuffer(ctx, 4));
+          const insectBp = biquad(ctx, 'bandpass', 7500, 6);
+          const insectG = gain(ctx, 0.025);
+          insect.connect(insectBp); insectBp.connect(insectG); insectG.connect(out);
+
+          wind.start(); hum.start(); insect.start(); windLfo.start();
+          stoppers.push(wind, hum, insect, windLfo);
+
+          // --- Bird chirps: sine glides at random pitch / interval ---
+          let birdTimer;
+          const chirp = () => {
+            const notes = Math.random() < 0.5 ? 1 : 2 + Math.floor(Math.random()*2);
+            let t = ctx.currentTime;
+            for (let n = 0; n < notes; n++) {
+              const osc = ctx.createOscillator(); osc.type = 'sine';
+              const f0 = rand(2000, 4000);
+              const cg = ctx.createGain();
+              const dur = rand(0.08, 0.15);
+              osc.frequency.setValueAtTime(f0, t);
+              osc.frequency.exponentialRampToValueAtTime(f0 * rand(1.2, 1.8), t + dur);
+              cg.gain.setValueAtTime(0, t);
+              cg.gain.linearRampToValueAtTime(0.10, t + 0.015);
+              cg.gain.exponentialRampToValueAtTime(0.0008, t + dur);
+              osc.connect(cg); cg.connect(out);
+              osc.start(t); osc.stop(t + dur + 0.02);
+              t += dur + rand(0.05, 0.12);
+            }
+            birdTimer = setTimeout(chirp, rand(4000, 12000));
+          };
+          birdTimer = setTimeout(chirp, rand(2000, 5000));
+          stoppers.push({ stop(){ clearTimeout(birdTimer); } });
+
+          return stoppers;
+        },
+
+        // 🔥 CAMPFIRE — crackle bed + sample-accurate crackle engine + pops + hiss
+        campfire(out) {
+          const stoppers = [];
+
+          // --- Deep crackle bed: brown noise lowpassed ---
+          const bed = noiseSource(ctx, makeBrownBuffer(ctx, 5));
+          const bedLp = biquad(ctx, 'lowpass', 300, 0.8);
+          const bedG = gain(ctx, 0.4);
+          bed.connect(bedLp); bedLp.connect(bedG); bedG.connect(out);
+
+          // --- Steady hiss between crackles: white noise highpass 4000 ---
+          const hiss = noiseSource(ctx, makeWhiteBuffer(ctx, 4));
+          const hissHp = biquad(ctx, 'highpass', 4000, 0.7);
+          const hissG = gain(ctx, 0.05);
+          hiss.connect(hissHp); hissHp.connect(hissG); hissG.connect(out);
+
+          bed.start(); hiss.start();
+          stoppers.push(bed, hiss);
+
+          // --- Crackle engine: ScriptProcessor generates random decaying impulses ---
+          const proc = ctx.createScriptProcessor(2048, 1, 1);
+          let env = 0;          // current impulse envelope
+          let decay = 0.0006;   // per-sample multiplicative decay
+          let polarity = 1;
+          proc.onaudioprocess = (e) => {
+            const o = e.outputBuffer.getChannelData(0);
+            for (let i = 0; i < o.length; i++) {
+              // 0.1% chance per sample to ignite a new crackle spike
+              if (Math.random() < 0.001) {
+                env = rand(0.3, 0.9);
+                polarity = Math.random() < 0.5 ? 1 : -1;
+                decay = rand(0.0004, 0.0016); // varied crackle lengths
+              }
+              o[i] = polarity * env * (Math.random() * 2 - 1);
+              env *= (1 - decay);
+              if (env < 0.0001) env = 0;
+            }
+          };
+          const crackleBp = biquad(ctx, 'bandpass', 1800, 0.9);
+          const crackleG = gain(ctx, 0.7);
+          proc.connect(crackleBp); crackleBp.connect(crackleG); crackleG.connect(out);
+          // ScriptProcessor needs to stay referenced; stop() disconnects it.
+          stoppers.push({ stop(){ proc.disconnect(); proc.onaudioprocess = null; } });
+
+          // --- Big random pops every 1-4s ---
+          let popTimer;
+          const pop = () => {
+            const pb = ctx.createBufferSource();
+            pb.buffer = makeWhiteBuffer(ctx, 0.04);
+            const pbp = biquad(ctx, 'bandpass', rand(700, 2200), 1.2);
+            const pg = ctx.createGain();
+            const t = ctx.currentTime;
+            pg.gain.setValueAtTime(0, t);
+            pg.gain.linearRampToValueAtTime(rand(0.25, 0.5), t + 0.002);
+            pg.gain.exponentialRampToValueAtTime(0.0008, t + rand(0.01, 0.02));
+            pb.connect(pbp); pbp.connect(pg); pg.connect(out);
+            pb.start(t); pb.stop(t + 0.05);
+            popTimer = setTimeout(pop, rand(1000, 4000));
+          };
+          popTimer = setTimeout(pop, rand(800, 2500));
+          stoppers.push({ stop(){ clearTimeout(popTimer); } });
+
+          return stoppers;
+        },
+
+        // 📚 LIBRARY — near silence: HVAC hum + page turns + footsteps + chair creak
+        library(out) {
+          const stoppers = [];
+
+          // --- HVAC electrical hum: 120Hz + harmonics, all very low ---
+          [[120, 0.012], [240, 0.006], [360, 0.003]].forEach(([f, g]) => {
+            const osc = ctx.createOscillator(); osc.type = 'sine'; osc.frequency.value = f;
+            const og = gain(ctx, g);
+            osc.connect(og); og.connect(out); osc.start();
+            stoppers.push(osc);
+          });
+
+          // --- Very faint room tone so it's not dead silent ---
+          const tone = noiseSource(ctx, makePinkBuffer(ctx, 6));
+          const toneLp = biquad(ctx, 'lowpass', 500, 0.7);
+          const toneG = gain(ctx, 0.025);
+          tone.connect(toneLp); toneLp.connect(toneG); toneG.connect(out);
+          tone.start(); stoppers.push(tone);
+
+          // --- Page turns: soft filtered noise bursts every 8-20s ---
+          let pageTimer;
+          const page = () => {
+            const pb = ctx.createBufferSource();
+            pb.buffer = makeWhiteBuffer(ctx, 0.35);
+            const pbp = biquad(ctx, 'bandpass', rand(1500, 3500), 1);
+            const pg = ctx.createGain();
+            const t = ctx.currentTime;
+            const dur = rand(0.15, 0.3);
+            pg.gain.setValueAtTime(0, t);
+            pg.gain.linearRampToValueAtTime(0.10, t + 0.03);
+            pg.gain.linearRampToValueAtTime(0.05, t + dur * 0.5);
+            pg.gain.exponentialRampToValueAtTime(0.0008, t + dur);
+            pb.connect(pbp); pbp.connect(pg); pg.connect(out);
+            pb.start(t); pb.stop(t + dur + 0.05);
+            pageTimer = setTimeout(page, rand(8000, 20000));
+          };
+          pageTimer = setTimeout(page, rand(5000, 12000));
+          stoppers.push({ stop(){ clearTimeout(pageTimer); } });
+
+          // --- Distant footsteps: a few low taps with slight timing variation ---
+          let stepTimer;
+          const footsteps = () => {
+            const beats = 4 + Math.floor(Math.random() * 3);
+            let t = ctx.currentTime;
+            for (let b = 0; b < beats; b++) {
+              const osc = ctx.createOscillator(); osc.type = 'sine'; osc.frequency.value = rand(95, 110);
+              const sg = ctx.createGain();
+              sg.gain.setValueAtTime(0, t);
+              sg.gain.linearRampToValueAtTime(0.05, t + 0.01);
+              sg.gain.exponentialRampToValueAtTime(0.0008, t + 0.12);
+              osc.connect(sg); sg.connect(out);
+              osc.start(t); osc.stop(t + 0.15);
+              t += rand(0.45, 0.6);
+            }
+            stepTimer = setTimeout(footsteps, rand(20000, 40000));
+          };
+          stepTimer = setTimeout(footsteps, rand(12000, 25000));
+          stoppers.push({ stop(){ clearTimeout(stepTimer); } });
+
+          // --- Rare chair creak: frequency-swept noise ---
+          let creakTimer;
+          const creak = () => {
+            const cb = ctx.createBufferSource();
+            cb.buffer = makeWhiteBuffer(ctx, 0.3);
+            const cbp = biquad(ctx, 'bandpass', 200, 6);
+            const cg = ctx.createGain();
+            const t = ctx.currentTime;
+            cbp.frequency.setValueAtTime(200, t);
+            cbp.frequency.linearRampToValueAtTime(800, t + 0.2);
+            cg.gain.setValueAtTime(0, t);
+            cg.gain.linearRampToValueAtTime(0.07, t + 0.05);
+            cg.gain.exponentialRampToValueAtTime(0.0008, t + 0.2);
+            cb.connect(cbp); cbp.connect(cg); cg.connect(out);
+            cb.start(t); cb.stop(t + 0.25);
+            creakTimer = setTimeout(creak, rand(30000, 60000));
+          };
+          creakTimer = setTimeout(creak, rand(20000, 45000));
+          stoppers.push({ stop(){ clearTimeout(creakTimer); } });
+
+          return stoppers;
+        },
+
+        // ⛈️ THUNDERSTORM — heavy rain + dramatic sweeping rumble + lightning crack + gusts
+        thunder(out) {
+          const stoppers = [];
+
+          // --- Heavy rain base (denser & louder than gentle rain) ---
+          const rain = noiseSource(ctx, makeWhiteBuffer(ctx, 4));
+          const rainHp = biquad(ctx, 'highpass', 500, 0.7);
+          const rainLp = biquad(ctx, 'lowpass', 7000, 0.7);
+          const rainG = gain(ctx, 0.55);
+          rain.connect(rainHp); rainHp.connect(rainLp); rainLp.connect(rainG); rainG.connect(out);
+
+          // --- Low body of the downpour ---
+          const body = noiseSource(ctx, makePinkBuffer(ctx, 5));
+          const bodyBp = biquad(ctx, 'bandpass', 600, 0.5);
+          const bodyG = gain(ctx, 0.22);
+          body.connect(bodyBp); bodyBp.connect(bodyG); bodyG.connect(out);
+
+          rain.start(); body.start();
+          stoppers.push(rain, body);
+
+          // --- Wind gusts: slow amplitude surges of the rain ---
+          let gustTimer;
+          const gust = () => {
+            const t = ctx.currentTime;
+            const peak = rand(0.7, 0.95);
+            rainG.gain.cancelScheduledValues(t);
+            rainG.gain.setValueAtTime(rainG.gain.value, t);
+            rainG.gain.linearRampToValueAtTime(peak, t + rand(1.5, 3));
+            rainG.gain.linearRampToValueAtTime(0.55, t + rand(4, 7));
+            gustTimer = setTimeout(gust, rand(8000, 16000));
+          };
+          gustTimer = setTimeout(gust, rand(5000, 10000));
+          stoppers.push({ stop(){ clearTimeout(gustTimer); } });
+
+          // --- Thunder events ---
+          let thunderTimer;
+          const thunder = () => {
+            const t0 = ctx.currentTime;
+
+            // 1) brief dip in rain just before the strike
+            rainG.gain.cancelScheduledValues(t0);
+            rainG.gain.setValueAtTime(rainG.gain.value, t0);
+            rainG.gain.linearRampToValueAtTime(0.30, t0 + 0.1);
+            rainG.gain.linearRampToValueAtTime(0.55, t0 + 1.2);
+
+            const strike = t0 + 0.12;
+
+            // 2) lightning crack: brief broadband burst at the peak
+            const crack = ctx.createBufferSource();
+            crack.buffer = makeWhiteBuffer(ctx, 0.05);
+            const crackG = ctx.createGain();
+            crackG.gain.setValueAtTime(0, strike);
+            crackG.gain.linearRampToValueAtTime(0.5, strike + 0.004);
+            crackG.gain.exponentialRampToValueAtTime(0.001, strike + 0.03);
+            crack.connect(crackG); crackG.connect(out);
+            crack.start(strike); crack.stop(strike + 0.06);
+
+            // 3) low rumble: sine sweeping 80 -> 40 Hz, loud, long decay, + noise body
+            const dur = rand(2.5, 4);
+            const osc = ctx.createOscillator(); osc.type = 'sine';
+            osc.frequency.setValueAtTime(80, strike);
+            osc.frequency.exponentialRampToValueAtTime(40, strike + dur);
+            const noiseBody = ctx.createBufferSource();
+            noiseBody.buffer = makeBrownBuffer(ctx, 3);
+            const nLp = biquad(ctx, 'lowpass', 160, 0.7);
+            const rumbleG = ctx.createGain();
+            rumbleG.gain.setValueAtTime(0, strike);
+            rumbleG.gain.linearRampToValueAtTime(0.9, strike + 0.15);
+            rumbleG.gain.exponentialRampToValueAtTime(0.0008, strike + dur);
+            osc.connect(rumbleG);
+            noiseBody.connect(nLp); nLp.connect(rumbleG);
+            rumbleG.connect(out);
+            osc.start(strike); osc.stop(strike + dur + 0.1);
+            noiseBody.start(strike); noiseBody.stop(strike + dur + 0.1);
+
+            thunderTimer = setTimeout(thunder, rand(15000, 40000));
+          };
+          thunderTimer = setTimeout(thunder, rand(5000, 12000));
+          stoppers.push({ stop(){ clearTimeout(thunderTimer); } });
+
+          return stoppers;
+        },
+
+        // 🌬️ WIND — howling via swept narrow bandpasses + gusts + low undertone
+        wind(out) {
+          const stoppers = [];
+
+          // --- Low undertone: deep brown push ---
+          const under = noiseSource(ctx, makeBrownBuffer(ctx, 5));
+          const underLp = biquad(ctx, 'lowpass', 300, 0.7);
+          const underG = gain(ctx, 0.18);
+          under.connect(underLp); underLp.connect(underG); underG.connect(out);
+          under.start(); stoppers.push(under);
+
+          // --- Howling layers: narrow bandpass (Q=15) swept by slow LFOs ---
+          const layers = [
+            { rate: 0.07, base: 600, depth: 450, vol: 0.30 },
+            { rate: 0.11, base: 800, depth: 400, vol: 0.22 },
+            { rate: 0.05, base: 400, depth: 300, vol: 0.20 },
+          ];
+          layers.forEach(L => {
+            const src = noiseSource(ctx, makeWhiteBuffer(ctx, 5));
+            const bp = biquad(ctx, 'bandpass', L.base, 15);
+            const g = gain(ctx, L.vol);
+            const swp = lfo(ctx, L.rate);
+            const swpDepth = gain(ctx, L.depth); // sweeps 200..1200 region
+            swp.connect(swpDepth); swpDepth.connect(bp.frequency);
+            src.connect(bp); bp.connect(g); g.connect(out);
+            src.start(); swp.start();
+            stoppers.push(src, swp);
+          });
+
+          // --- Gusts: occasional 2x amplitude surge on the undertone then fade ---
+          let gustTimer;
+          const gust = () => {
+            const t = ctx.currentTime;
+            const dur = rand(0.5, 2);
+            underG.gain.cancelScheduledValues(t);
+            underG.gain.setValueAtTime(underG.gain.value, t);
+            underG.gain.linearRampToValueAtTime(0.36, t + dur * 0.4);
+            underG.gain.linearRampToValueAtTime(0.18, t + dur + rand(1, 2));
+            gustTimer = setTimeout(gust, rand(6000, 14000));
+          };
+          gustTimer = setTimeout(gust, rand(4000, 9000));
+          stoppers.push({ stop(){ clearTimeout(gustTimer); } });
+
+          return stoppers;
+        },
+
+        // ☕ CAFE — speech-formant murmur + espresso + cup clinks + faint music chord
+        cafe(out) {
+          const stoppers = [];
+
+          // --- Crowd murmur: pink noise through speech-formant bandpasses ---
+          const murmur = noiseSource(ctx, makePinkBuffer(ctx, 6));
+          const murmurInG = gain(ctx, 0.5);
+          murmur.connect(murmurInG);
+          const formantOut = gain(ctx, 0.5);
+          [[200, 5], [500, 6], [800, 7], [1200, 6]].forEach(([f, q]) => {
+            const bp = biquad(ctx, 'bandpass', f, q);
+            murmurInG.connect(bp); bp.connect(formantOut);
+          });
+          // gentle amplitude wobble so the murmur breathes like a room of people
+          const murmurLfo = lfo(ctx, 0.15);
+          const murmurDepth = gain(ctx, 0.12);
+          murmurLfo.connect(murmurDepth); murmurDepth.connect(formantOut.gain);
+          formantOut.connect(out);
+          murmur.start(); murmurLfo.start();
+          stoppers.push(murmur, murmurLfo);
+
+          // --- Faint background music: C major chord, very low, slowly evolving ---
+          const chordOut = gain(ctx, 0.018);
+          chordOut.connect(out);
+          [261.63, 329.63, 392.0, 523.25].forEach((f, i) => {
+            const osc = ctx.createOscillator(); osc.type = 'sine'; osc.frequency.value = f;
+            const og = gain(ctx, 0.25);
+            // slow tremolo per note for an evolving, muffled-through-walls feel
+            const trem = lfo(ctx, 0.07 + i * 0.013);
+            const tremDepth = gain(ctx, 0.18);
+            trem.connect(tremDepth); tremDepth.connect(og.gain);
+            const muffle = biquad(ctx, 'lowpass', 700, 0.7);
+            osc.connect(og); og.connect(muffle); muffle.connect(chordOut);
+            osc.start(); trem.start();
+            stoppers.push(osc, trem);
+          });
+
+          // --- Espresso machine: high-frequency hiss burst that ramps then cuts ---
+          let espressoTimer;
+          const espresso = () => {
+            const eb = ctx.createBufferSource();
+            eb.buffer = makeWhiteBuffer(ctx, 2.5);
+            const ebp = biquad(ctx, 'bandpass', 4000, 1.2);
+            const eg = ctx.createGain();
+            const t = ctx.currentTime;
+            const dur = rand(1, 2);
+            eg.gain.setValueAtTime(0, t);
+            eg.gain.linearRampToValueAtTime(0.10, t + 0.2);
+            eg.gain.setValueAtTime(0.10, t + dur - 0.1);
+            eg.gain.linearRampToValueAtTime(0.0008, t + dur);
+            eb.connect(ebp); ebp.connect(eg); eg.connect(out);
+            eb.start(t); eb.stop(t + dur + 0.1);
+            espressoTimer = setTimeout(espresso, rand(20000, 40000));
+          };
+          espressoTimer = setTimeout(espresso, rand(8000, 20000));
+          stoppers.push({ stop(){ clearTimeout(espressoTimer); } });
+
+          // --- Cup clinks: short bright sine ping ---
+          let clinkTimer;
+          const clink = () => {
+            const osc = ctx.createOscillator(); osc.type = 'sine';
+            osc.frequency.value = rand(800, 1200);
+            const cg = ctx.createGain();
+            const t = ctx.currentTime;
+            cg.gain.setValueAtTime(0, t);
+            cg.gain.linearRampToValueAtTime(0.06, t + 0.004);
+            cg.gain.exponentialRampToValueAtTime(0.0008, t + 0.05);
+            osc.connect(cg); cg.connect(out);
+            osc.start(t); osc.stop(t + 0.08);
+            clinkTimer = setTimeout(clink, rand(5000, 15000));
+          };
+          clinkTimer = setTimeout(clink, rand(3000, 9000));
+          stoppers.push({ stop(){ clearTimeout(clinkTimer); } });
+
+          return stoppers;
+        },
+      };
+
+      return {
+        getContext: ensureCtx,
+        ensureMaster,
+        start(id) {
+          ensureCtx();
+          ensureMaster();
+          if (sounds[id]) return sounds[id].gain;
+          const g = ctx.createGain();
+          g.gain.value = 0; // ramped up by React right after
+          g.connect(master);
+          const stoppers = builders[id](g);
+          sounds[id] = { gain: g, stoppers };
+          return g;
+        },
+        stop(id) {
+          const s = sounds[id];
+          if (!s) return;
+          const t = ctx.currentTime;
+          s.gain.gain.cancelScheduledValues(t);
+          s.gain.gain.setValueAtTime(s.gain.gain.value, t);
+          s.gain.gain.linearRampToValueAtTime(0, t + 0.3);
+          delete sounds[id];
+          setTimeout(() => {
+            s.stoppers.forEach(n => { try { n.stop && n.stop(); } catch(e){} });
+            try { s.gain.disconnect(); } catch(e){}
+          }, 350);
+        },
+        setVolume(id, v) {
+          const s = sounds[id];
+          if (s) {
+            const t = ctx.currentTime;
+            s.gain.gain.cancelScheduledValues(t);
+            s.gain.gain.setTargetAtTime(v, t, 0.05);
+          }
+        },
+        setMaster(v) {
+          if (master) master.gain.setTargetAtTime(v, ctx.currentTime, 0.05);
+        },
+        isActive(id) { return !!sounds[id]; },
+        activeIds() { return Object.keys(sounds); },
+      };
+    }
+
+    // ========================================
+    // 🎵 Sound definitions
+    // ========================================
+    const SOUNDS = [
+      { id:'ocean',    name:'바다',   nameEn:'Ocean Waves',   emoji:'🌊', color:'#0ea5e9' },
+      { id:'rain',     name:'비',     nameEn:'Rainfall',      emoji:'🌧️', color:'#64748b' },
+      { id:'forest',   name:'숲',     nameEn:'Forest',        emoji:'🌲', color:'#22c55e' },
+      { id:'campfire', name:'모닥불', nameEn:'Campfire',      emoji:'🔥', color:'#f97316' },
+      { id:'library',  name:'도서관', nameEn:'Library',       emoji:'📚', color:'#a78bfa' },
+      { id:'thunder',  name:'천둥',   nameEn:'Thunderstorm',  emoji:'⛈️', color:'#6366f1' },
+      { id:'wind',     name:'바람',   nameEn:'Wind',          emoji:'🌬️', color:'#94a3b8' },
+      { id:'cafe',     name:'카페',   nameEn:'Coffee Shop',   emoji:'☕', color:'#d97706' },
+    ];
+
+    const PRESETS = [
+      { id:'sleep',   label:'🌙 수면',  mix:{ rain:0.6, ocean:0.5 } },
+      { id:'meditate',label:'🧘 명상',  mix:{ forest:0.6, wind:0.4 } },
+      { id:'focus',   label:'📖 집중',  mix:{ library:0.7, cafe:0.4 } },
+      { id:'camping', label:'⛺ 캠핑',  mix:{ campfire:0.6, wind:0.35, forest:0.45 } },
+      { id:'storm',   label:'⛈️ 폭풍우',mix:{ thunder:0.6, wind:0.4 } },
+    ];
+
+    const TIMER_OPTIONS = [
+      { v:0,  label:'타이머 없음' },
+      { v:15, label:'15분' },
+      { v:30, label:'30분' },
+      { v:45, label:'45분' },
+      { v:60, label:'1시간' },
+    ];
+
+    // ========================================
+    // 🎨 Design System Components
+    // ========================================
+    function StarField() {
+      const stars = useMemo(() => {
+        return Array.from({ length: 70 }).map((_, i) => ({
+          id: i,
+          top: Math.random() * 100,
+          left: Math.random() * 100,
+          size: Math.random() * 2 + 0.5,
+          dur: Math.random() * 4 + 3,
+          delay: Math.random() * 5,
+        }));
+      }, []);
+      return (
+        <div className="stars" aria-hidden="true">
+          {stars.map(s => (
+            <span key={s.id} className="star" style={{
+              top: s.top + '%', left: s.left + '%',
+              width: s.size + 'px', height: s.size + 'px',
+              animationDuration: s.dur + 's', animationDelay: s.delay + 's',
+            }} />
+          ))}
+        </div>
+      );
+    }
+
+    function hexToRgba(hex, a) {
+      const h = hex.replace('#','');
+      const r = parseInt(h.substring(0,2),16);
+      const g = parseInt(h.substring(2,4),16);
+      const b = parseInt(h.substring(4,6),16);
+      return `rgba(${r},${g},${b},${a})`;
+    }
+
+    function VolumeSlider({ value, onChange, color }) {
+      const pct = Math.round(value * 100);
+      return (
+        <div className="w-full" onClick={(e)=>e.stopPropagation()}>
+          <input
+            type="range" min="0" max="1" step="0.01" value={value}
+            onChange={(e)=>onChange(parseFloat(e.target.value))}
+            aria-label="볼륨"
+            style={{
+              '--thumb': color,
+              background: `linear-gradient(to right, ${color} ${pct}%, rgba(255,255,255,0.12) ${pct}%)`,
+            }}
+          />
+        </div>
+      );
+    }
+
+    function PresetButton({ label, onClick }) {
+      return (
+        <button
+          onClick={onClick}
+          className="glass px-4 py-2.5 rounded-full text-sm font-medium text-slate-200 whitespace-nowrap
+                     transition-all duration-300 hover:bg-white/10 hover:text-white
+                     hover:shadow-[0_0_22px_-4px_rgba(94,234,212,0.5)] active:scale-95"
+        >
+          {label}
+        </button>
+      );
+    }
+
+    // ========================================
+    // 🧩 Sound Card
+    // ========================================
+    function SoundCard({ sound, active, volume, onToggle, onVolume }) {
+      const { color } = sound;
+      const style = active ? {
+        background: `linear-gradient(160deg, ${hexToRgba(color,0.18)}, rgba(255,255,255,0.03))`,
+        borderColor: hexToRgba(color, 0.55),
+        '--glow-a': hexToRgba(color,0.0),
+        '--glow-b': hexToRgba(color,0.45),
+        '--glow-c': hexToRgba(color,0.15),
+      } : {};
+      return (
+        <div
+          onClick={onToggle}
+          role="button" tabIndex={0}
+          onKeyDown={(e)=>{ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); onToggle(); } }}
+          aria-pressed={active}
+          className={`glass rounded-3xl p-6 flex flex-col items-center text-center cursor-pointer
+                      transition-all duration-300 select-none
+                      ${active ? 'active-pulse -translate-y-1' : 'hover:-translate-y-1 hover:bg-white/[0.07]'}`}
+          style={style}
+        >
+          <div
+            className="text-[60px] leading-none mb-3 transition-transform duration-300"
+            style={{ filter: active ? `drop-shadow(0 0 16px ${hexToRgba(color,0.8)})` : 'none',
+                     transform: active ? 'scale(1.05)' : 'scale(1)' }}
+          >
+            {sound.emoji}
+          </div>
+          <div className="font-display text-2xl text-white tracking-wide">{sound.name}</div>
+          <div className="text-xs uppercase tracking-[0.2em] mt-1 mb-5"
+               style={{ color: active ? color : 'rgba(226,232,240,0.45)' }}>
+            {sound.nameEn}
+          </div>
+          <VolumeSlider value={volume} onChange={onVolume} color={color} />
+        </div>
+      );
+    }
+
+    // ========================================
+    // 🧩 Header
+    // ========================================
+    function Header() {
+      return (
+        <header className="relative z-10 text-center pt-16 pb-10 px-4">
+          <div className="flex justify-center mb-8">
+            <div className="relative w-24 h-24 flex items-center justify-center">
+              <div className="absolute inset-0 rounded-full breathe"
+                   style={{ background:'radial-gradient(circle, rgba(94,234,212,0.45), rgba(56,189,248,0.15) 60%, transparent 75%)' }} />
+              <div className="absolute inset-5 rounded-full border border-teal-200/30 breathe"
+                   style={{ animationDelay:'-0.4s' }} />
+            </div>
+          </div>
+          <h1 className="font-display text-6xl md:text-7xl font-semibold tracking-wide text-white"
+              style={{ textShadow:'0 0 40px rgba(94,234,212,0.45), 0 0 80px rgba(56,189,248,0.25)' }}>
+            Tranquil
+          </h1>
+          <p className="mt-5 text-slate-300/80 text-base md:text-lg font-light tracking-wide">
+            소음을 지우고, 나를 찾는 시간
+          </p>
+        </header>
+      );
+    }
+
+    // ========================================
+    // 🧩 Master Controls (bottom bar)
+    // ========================================
+    function MasterBar({ master, onMaster, timer, onTimer, remaining, onPreset, anyActive }) {
+      const fmt = (s) => {
+        const m = Math.floor(s/60), sec = s%60;
+        return `${m}:${String(sec).padStart(2,'0')}`;
+      };
+      return (
+        <div className="fixed bottom-0 inset-x-0 z-20 px-4 pb-4">
+          <div className="max-w-5xl mx-auto glass rounded-3xl px-5 py-4 md:px-8 md:py-5
+                          shadow-[0_-10px_50px_-20px_rgba(0,0,0,0.8)]">
+            {/* presets */}
+            <div className="flex gap-2.5 overflow-x-auto pb-3 mb-3 border-b border-white/10
+                            [scrollbar-width:none]">
+              {PRESETS.map(p => (
+                <PresetButton key={p.id} label={p.label} onClick={()=>onPreset(p)} />
+              ))}
+            </div>
+            <div className="flex flex-col md:flex-row md:items-center gap-4 md:gap-8">
+              {/* master volume */}
+              <div className="flex items-center gap-3 flex-1 min-w-0">
+                <span className="text-lg" aria-hidden="true">🔈</span>
+                <div className="flex-1">
+                  <div className="text-[11px] uppercase tracking-[0.2em] text-slate-400 mb-1.5">전체 볼륨</div>
+                  <VolumeSlider value={master} onChange={onMaster} color="#5eead4" />
+                </div>
+                <span className="text-lg" aria-hidden="true">🔊</span>
+              </div>
+              {/* timer */}
+              <div className="flex items-center gap-3">
+                <div>
+                  <div className="text-[11px] uppercase tracking-[0.2em] text-slate-400 mb-1.5">타이머</div>
+                  <select
+                    value={timer} onChange={(e)=>onTimer(parseInt(e.target.value))}
+                    className="rounded-xl px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-300/40"
+                  >
+                    {TIMER_OPTIONS.map(o => <option key={o.v} value={o.v}>{o.label}</option>)}
+                  </select>
+                </div>
+                {remaining > 0 && (
+                  <div className="text-center min-w-[92px]">
+                    <div className="font-display text-2xl text-teal-200 tabular-nums"
+                         style={{ textShadow:'0 0 18px rgba(94,234,212,0.5)' }}>
+                      {fmt(remaining)}
+                    </div>
+                    <div className="text-[10px] uppercase tracking-[0.2em] text-slate-400">remaining</div>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // ========================================
+    // 🚀 App
+    // ========================================
+    function App() {
+      const engineRef = useRef(null);
+      const [active, setActive] = useState({});            // id -> true
+      const [volumes, setVolumes] = useState(() => {
+        const v = {}; SOUNDS.forEach(s => v[s.id] = 0.6); return v;
+      });
+      const [master, setMaster] = useState(0.8);
+      const [timer, setTimer] = useState(0);               // minutes
+      const [remaining, setRemaining] = useState(0);       // seconds
+      const fadingRef = useRef(false);
+
+      const getEngine = useCallback(() => {
+        if (!engineRef.current) {
+          engineRef.current = createAudioEngine();
+        }
+        const eng = engineRef.current;
+        eng.ensureMaster();
+        eng.setMaster(master);
+        return eng;
+      }, [master]);
+
+      const toggleSound = useCallback((id) => {
+        const eng = getEngine();
+        setActive(prev => {
+          const next = { ...prev };
+          if (next[id]) {
+            eng.stop(id);
+            delete next[id];
+          } else {
+            eng.start(id);
+            eng.setVolume(id, 0);
+            requestAnimationFrame(() => eng.setVolume(id, volumes[id]));
+            next[id] = true;
+          }
+          return next;
+        });
+      }, [getEngine, volumes]);
+
+      const changeVolume = useCallback((id, v) => {
+        setVolumes(prev => ({ ...prev, [id]: v }));
+        const eng = engineRef.current;
+        if (eng && eng.isActive(id)) eng.setVolume(id, v);
+      }, []);
+
+      const changeMaster = useCallback((v) => {
+        setMaster(v);
+        if (engineRef.current) engineRef.current.setMaster(v);
+      }, []);
+
+      const applyPreset = useCallback((preset) => {
+        const eng = getEngine();
+        eng.activeIds().forEach(id => eng.stop(id));
+        const newActive = {};
+        const newVolumes = { ...volumes };
+        Object.entries(preset.mix).forEach(([id, vol]) => {
+          newVolumes[id] = vol;
+          eng.start(id);
+          eng.setVolume(id, 0);
+          newActive[id] = true;
+        });
+        setVolumes(newVolumes);
+        setActive(newActive);
+        requestAnimationFrame(() => {
+          Object.entries(preset.mix).forEach(([id, vol]) => eng.setVolume(id, vol));
+        });
+      }, [getEngine, volumes]);
+
+      // ===== Timer logic =====
+      const handleTimer = useCallback((minutes) => {
+        setTimer(minutes);
+        fadingRef.current = false;
+        setRemaining(minutes > 0 ? minutes * 60 : 0);
+      }, []);
+
+      useEffect(() => {
+        if (remaining <= 0) return;
+        const interval = setInterval(() => {
+          setRemaining(r => {
+            const next = r - 1;
+            // fade out during the final minute
+            if (next === 60 && !fadingRef.current && engineRef.current) {
+              fadingRef.current = true;
+              engineRef.current.setMaster(0);
+            }
+            if (next <= 0) {
+              const eng = engineRef.current;
+              if (eng) {
+                eng.activeIds().forEach(id => eng.stop(id));
+                eng.setMaster(master);
+              }
+              setActive({});
+              fadingRef.current = false;
+              return 0;
+            }
+            return next;
+          });
+        }, 1000);
+        return () => clearInterval(interval);
+      }, [remaining > 0, master]);
+
+      const anyActive = Object.keys(active).length > 0;
+
+      return (
+        <div className="relative min-h-screen pb-48">
+          <div className="aurora" aria-hidden="true" />
+          <StarField />
+
+          <Header />
+
+          <main className="relative z-10 max-w-6xl mx-auto px-4 md:px-6">
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
+              {SOUNDS.map(s => (
+                <SoundCard
+                  key={s.id}
+                  sound={s}
+                  active={!!active[s.id]}
+                  volume={volumes[s.id]}
+                  onToggle={() => toggleSound(s.id)}
+                  onVolume={(v) => changeVolume(s.id, v)}
+                />
+              ))}
+            </div>
+
+            <p className="text-center text-slate-500 text-xs tracking-wide mt-10">
+              {anyActive
+                ? '카드를 다시 누르면 소리가 꺼집니다 · 여러 소리를 동시에 섞어보세요'
+                : '카드를 눌러 소리를 재생하세요 · 모든 사운드는 실시간으로 생성됩니다'}
+            </p>
+          </main>
+
+          <MasterBar
+            master={master} onMaster={changeMaster}
+            timer={timer} onTimer={handleTimer}
+            remaining={remaining}
+            onPreset={applyPreset}
+            anyActive={anyActive}
+          />
+        </div>
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+  </script>
+</body>
+</html>

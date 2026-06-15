@@ -1,7 +1,34 @@
 {
   "permissions": {
     "allow": [
-      "Bash(git *)"
+      "Bash(mkdir -p /Users/ahnsoeun/Downloads/AFM-Bootcamp/week-2/playground)",
+      "Bash(mv /Users/ahnsoeun/Downloads/AFM-Bootcamp/week-2/신사역_맛집.md /Users/ahnsoeun/Downloads/AFM-Bootcamp/week-2/2026-06-13_주식.md /Users/ahnsoeun/Downloads/AFM-Bootcamp/week-2/us_stock_market_20260613.md /Users/ahnsoeun/Downloads/AFM-Bootcamp/week-2/직장인_부업_가이드.md /Users/ahnsoeun/Downloads/AFM-Bootcamp/week-2/playground/)",
+      "Bash(open *)",
+      "Bash(screencapture -x /tmp/tax-calc-initial.png)",
+      "Bash(screencapture /tmp/tax-calc-initial.png)",
+      "Bash(screencapture -T 2 /tmp/tax-calc-initial.png)",
+      "Bash(osascript -e 'tell application \"Safari\" to activate')",
+      "Bash(osascript -e 'tell application \"Google Chrome\" to activate')",
+      "Bash(screencapture /tmp/tax-calc-browser.png)",
+      "Bash(osascript -e 'tell application \"Safari\" *)",
+      "Bash(screencapture /tmp/tax-calc-loaded.png)",
+      "Bash(osascript)",
+      "Bash(screencapture /tmp/tax-calc-result.png)",
+      "Bash(screencapture /tmp/tax-calc-typed.png)",
+      "Bash(screencapture /tmp/meme-maker-loaded.png)",
+      "Bash(screencapture /tmp/meme-maker-v2.png)",
+      "Bash(screencapture /tmp/qr-generator.png)",
+      "Bash(screencapture /tmp/qr-v2.png)",
+      "Bash(screencapture /tmp/qr-wifi.png)",
+      "Bash(screencapture /tmp/pdf-generator.png)",
+      "Bash(screencapture /tmp/pdf-gen-v2.png)",
+      "Bash(screencapture /tmp/pdf-gen-v3.png)",
+      "Bash(screencapture /tmp/pdf-gen-v4.png)",
+      "Bash(screencapture /tmp/pdf-gen-v5.png)",
+      "Bash(git *)",
+      "Bash(gh auth *)",
+      "Bash(gh repo *)",
+      "WebSearch"
     ]
   }
 }
