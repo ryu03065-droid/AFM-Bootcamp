@@ -1,0 +1,595 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>짤 생성기 - Meme Maker</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <style>
+    @keyframes float {
+      0%, 100% { transform: translateY(0); }
+      50% { transform: translateY(-8px); }
+    }
+    .animate-float { animation: float 3s ease-in-out infinite; }
+    @keyframes pop {
+      0% { transform: scale(0.95); opacity: 0; }
+      100% { transform: scale(1); opacity: 1; }
+    }
+    .animate-pop { animation: pop 0.25s ease-out; }
+    input[type=range] {
+      -webkit-appearance: none;
+      appearance: none;
+      height: 6px;
+      border-radius: 9999px;
+      background: #e5e7eb;
+      outline: none;
+    }
+    input[type=range]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 18px;
+      height: 18px;
+      border-radius: 9999px;
+      background: #7c3aed;
+      cursor: pointer;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.3);
+    }
+    input[type=range]::-moz-range-thumb {
+      width: 18px;
+      height: 18px;
+      border: none;
+      border-radius: 9999px;
+      background: #7c3aed;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body class="bg-gradient-to-br from-violet-50 via-fuchsia-50 to-rose-50 min-h-screen">
+  <div id="root"></div>
+
+  <script type="text/babel">
+    const { useState, useRef, useEffect, useCallback } = React;
+
+    // ========================================
+    // Design System
+    // ========================================
+
+    function Button({ variant = 'primary', size = 'md', disabled, onClick, className = '', children, type = 'button' }) {
+      const base = 'inline-flex items-center justify-center gap-2 font-bold rounded-xl transition-all active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed disabled:active:scale-100 focus:outline-none focus:ring-2 focus:ring-offset-1';
+      const variants = {
+        primary: 'bg-violet-600 hover:bg-violet-700 text-white shadow-lg shadow-violet-300 focus:ring-violet-400',
+        secondary: 'bg-white hover:bg-gray-50 text-gray-700 border border-gray-200 shadow-sm focus:ring-gray-300',
+        danger: 'bg-rose-500 hover:bg-rose-600 text-white shadow-lg shadow-rose-200 focus:ring-rose-400',
+        ghost: 'bg-transparent hover:bg-violet-100 text-violet-700 focus:ring-violet-300',
+        success: 'bg-emerald-500 hover:bg-emerald-600 text-white shadow-lg shadow-emerald-200 focus:ring-emerald-400',
+      };
+      const sizes = { sm: 'px-3 py-1.5 text-sm', md: 'px-4 py-2.5 text-sm', lg: 'px-6 py-3 text-base' };
+      return (
+        <button type={type} disabled={disabled} onClick={onClick}
+          className={`${base} ${variants[variant]} ${sizes[size]} ${className}`}>
+          {children}
+        </button>
+      );
+    }
+
+    function Card({ className = '', children }) {
+      return (
+        <div className={`bg-white/80 backdrop-blur rounded-2xl shadow-xl shadow-violet-100/50 border border-white/60 ${className}`}>
+          {children}
+        </div>
+      );
+    }
+
+    function Slider({ label, value, min, max, step = 1, unit = '', onChange }) {
+      return (
+        <div>
+          <div className="flex justify-between items-center mb-1.5">
+            <label className="text-sm font-semibold text-gray-700">{label}</label>
+            <span className="text-xs font-bold text-violet-600 bg-violet-100 px-2 py-0.5 rounded-full">{value}{unit}</span>
+          </div>
+          <input type="range" min={min} max={max} step={step} value={value}
+            onChange={(e) => onChange(Number(e.target.value))} className="w-full" />
+        </div>
+      );
+    }
+
+    function ColorPicker({ label, value, onChange }) {
+      return (
+        <div>
+          <label className="text-sm font-semibold text-gray-700 block mb-1.5">{label}</label>
+          <div className="flex items-center gap-2">
+            <div className="relative w-10 h-10 rounded-lg overflow-hidden border-2 border-gray-200 shadow-sm shrink-0">
+              <input type="color" value={value} onChange={(e) => onChange(e.target.value)}
+                className="absolute -inset-2 w-[calc(100%+1rem)] h-[calc(100%+1rem)] cursor-pointer" />
+            </div>
+            <input type="text" value={value} onChange={(e) => onChange(e.target.value)}
+              className="flex-1 min-w-0 px-2.5 py-2 text-sm font-mono uppercase border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-violet-300" />
+          </div>
+        </div>
+      );
+    }
+
+    function TextField({ label, value, onChange, placeholder }) {
+      return (
+        <div>
+          <label className="text-sm font-semibold text-gray-700 block mb-1.5">{label}</label>
+          <input type="text" value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder}
+            className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-violet-300 placeholder:text-gray-300" />
+        </div>
+      );
+    }
+
+    // ========================================
+    // Constants & Helpers
+    // ========================================
+
+    const FONT_FAMILIES = [
+      { label: 'Impact (클래식)', value: 'Impact, "Anton", "Arial Black", sans-serif' },
+      { label: 'Arial Black', value: '"Arial Black", Gadget, sans-serif' },
+      { label: '고딕 (Sans)', value: '"Apple SD Gothic Neo", "Malgun Gothic", sans-serif' },
+      { label: 'Serif', value: 'Georgia, "Times New Roman", serif' },
+      { label: 'Monospace', value: '"Courier New", monospace' },
+    ];
+
+    const EMOJI_LIST = [
+      '😂','🤣','💀','😭','🔥','👀','💯','🙏','😤','🤦',
+      '🤷','😩','😱','🤡','🫡','💪','🥺','👇','👆','✨',
+      '🎉','😎','🤔','😏','🥵','🫠','🤯','😳','🐸','🦆',
+      '👏','🫶','❤️','💔','⭐','🌈','🍕','🎯','🚀','💎',
+      '🐧','🐱','🐶','🦊','🐻','🐼','🐨','🦁','🐸','🐙',
+    ];
+
+    const makeTextItem = (text, position, canvasW, canvasH) => ({
+      id: Math.random().toString(36).slice(2),
+      kind: 'text',
+      text,
+      x: canvasW / 2,
+      y: position === 'top' ? canvasH * 0.12 : canvasH * 0.88,
+      fontSize: Math.max(28, Math.round(canvasW * 0.09)),
+      fontFamily: FONT_FAMILIES[0].value,
+      fillColor: '#FFFFFF',
+      strokeColor: '#000000',
+      strokeWidth: Math.max(2, Math.round(canvasW * 0.009)),
+      uppercase: true,
+    });
+
+    const makeEmojiItem = (emoji, canvasW, canvasH) => ({
+      id: Math.random().toString(36).slice(2),
+      kind: 'emoji',
+      emoji,
+      x: canvasW / 2,
+      y: canvasH / 2,
+      size: Math.max(40, Math.round(canvasW * 0.12)),
+    });
+
+    // ========================================
+    // Image Uploader
+    // ========================================
+
+    function ImageUploader({ onImageLoad }) {
+      const [dragOver, setDragOver] = useState(false);
+      const inputRef = useRef(null);
+
+      const handleFile = (file) => {
+        if (!file || !file.type.startsWith('image/')) return;
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          const img = new Image();
+          img.onload = () => onImageLoad(img);
+          img.src = e.target.result;
+        };
+        reader.readAsDataURL(file);
+      };
+
+      return (
+        <div
+          onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+          onDragLeave={() => setDragOver(false)}
+          onDrop={(e) => { e.preventDefault(); setDragOver(false); handleFile(e.dataTransfer.files[0]); }}
+          onClick={() => inputRef.current.click()}
+          className={`cursor-pointer rounded-2xl border-2 border-dashed p-10 text-center transition-all ${
+            dragOver ? 'border-violet-500 bg-violet-100 scale-[1.01]' : 'border-violet-200 bg-violet-50/50 hover:border-violet-400 hover:bg-violet-50'
+          }`}>
+          <input ref={inputRef} type="file" accept="image/*" className="hidden"
+            onChange={(e) => handleFile(e.target.files[0])} />
+          <div className="text-6xl mb-3 animate-float">🖼️</div>
+          <p className="font-bold text-gray-700 text-lg">이미지를 드래그하거나 클릭해서 업로드</p>
+          <p className="text-sm text-gray-400 mt-1">PNG, JPG, GIF 등 지원</p>
+        </div>
+      );
+    }
+
+    // ========================================
+    // Canvas (drag text & emoji)
+    // ========================================
+
+    function MemeCanvas({ image, texts, emojis, selectedId, onSelect, onMoveText, onMoveEmoji, canvasRef }) {
+      const dragState = useRef(null);
+
+      useEffect(() => {
+        const canvas = canvasRef.current;
+        if (!canvas || !image) return;
+        canvas.width = image.naturalWidth;
+        canvas.height = image.naturalHeight;
+        const ctx = canvas.getContext('2d');
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(image, 0, 0, canvas.width, canvas.height);
+
+        // Draw texts
+        texts.forEach((t) => {
+          const content = t.uppercase ? t.text.toUpperCase() : t.text;
+          ctx.font = `bold ${t.fontSize}px ${t.fontFamily}`;
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.lineJoin = 'round';
+          ctx.miterLimit = 2;
+          const lines = content.split('\n');
+          const lineHeight = t.fontSize * 1.1;
+          const startY = t.y - ((lines.length - 1) * lineHeight) / 2;
+          lines.forEach((line, i) => {
+            const ly = startY + i * lineHeight;
+            if (t.strokeWidth > 0) {
+              ctx.strokeStyle = t.strokeColor;
+              ctx.lineWidth = t.strokeWidth * 2;
+              ctx.strokeText(line, t.x, ly);
+            }
+            ctx.fillStyle = t.fillColor;
+            ctx.fillText(line, t.x, ly);
+          });
+        });
+
+        // Draw emojis (on top of texts)
+        emojis.forEach((e) => {
+          ctx.font = `${e.size}px serif`;
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText(e.emoji, e.x, e.y);
+        });
+      }, [image, texts, emojis, canvasRef]);
+
+      const eventToCanvas = (e) => {
+        const canvas = canvasRef.current;
+        const rect = canvas.getBoundingClientRect();
+        const scaleX = canvas.width / rect.width;
+        const scaleY = canvas.height / rect.height;
+        const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+        const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+        return { x: (clientX - rect.left) * scaleX, y: (clientY - rect.top) * scaleY };
+      };
+
+      const hitTest = (pos) => {
+        // Emojis are on top — test them first
+        for (let i = emojis.length - 1; i >= 0; i--) {
+          const e = emojis[i];
+          const half = e.size * 0.6;
+          if (Math.abs(pos.x - e.x) < half && Math.abs(pos.y - e.y) < half)
+            return { id: e.id, kind: 'emoji', x: e.x, y: e.y };
+        }
+        for (let i = texts.length - 1; i >= 0; i--) {
+          const t = texts[i];
+          const half = t.fontSize * 0.8;
+          const width = (t.text.length || 1) * t.fontSize * 0.4 + 40;
+          if (Math.abs(pos.x - t.x) < width && Math.abs(pos.y - t.y) < half)
+            return { id: t.id, kind: 'text', x: t.x, y: t.y };
+        }
+        return null;
+      };
+
+      const onPointerDown = (e) => {
+        const pos = eventToCanvas(e);
+        const hit = hitTest(pos);
+        if (hit) {
+          onSelect(hit.id, hit.kind);
+          dragState.current = { id: hit.id, kind: hit.kind, offsetX: pos.x - hit.x, offsetY: pos.y - hit.y };
+        } else {
+          onSelect(null, null);
+        }
+      };
+
+      const onPointerMove = (e) => {
+        if (!dragState.current) return;
+        e.preventDefault();
+        const pos = eventToCanvas(e);
+        const { id, kind, offsetX, offsetY } = dragState.current;
+        const canvas = canvasRef.current;
+        const nx = Math.max(0, Math.min(canvas.width, pos.x - offsetX));
+        const ny = Math.max(0, Math.min(canvas.height, pos.y - offsetY));
+        if (kind === 'emoji') onMoveEmoji(id, nx, ny);
+        else onMoveText(id, nx, ny);
+      };
+
+      const onPointerUp = () => { dragState.current = null; };
+
+      useEffect(() => {
+        window.addEventListener('mousemove', onPointerMove);
+        window.addEventListener('mouseup', onPointerUp);
+        window.addEventListener('touchmove', onPointerMove, { passive: false });
+        window.addEventListener('touchend', onPointerUp);
+        return () => {
+          window.removeEventListener('mousemove', onPointerMove);
+          window.removeEventListener('mouseup', onPointerUp);
+          window.removeEventListener('touchmove', onPointerMove);
+          window.removeEventListener('touchend', onPointerUp);
+        };
+      });
+
+      return (
+        <div className="relative w-full flex items-center justify-center">
+          <canvas
+            ref={canvasRef}
+            onMouseDown={onPointerDown}
+            onTouchStart={onPointerDown}
+            className="max-w-full max-h-[60vh] rounded-xl shadow-2xl cursor-move select-none touch-none"
+          />
+        </div>
+      );
+    }
+
+    // ========================================
+    // Text Editor Panel
+    // ========================================
+
+    function TextEditor({ item, onChange, onDelete }) {
+      const update = (key, val) => onChange({ ...item, [key]: val });
+      return (
+        <div className="space-y-4 animate-pop">
+          <TextField label="텍스트 내용" value={item.text} onChange={(v) => update('text', v)} placeholder="여기에 입력..." />
+          <div>
+            <label className="text-sm font-semibold text-gray-700 block mb-1.5">폰트</label>
+            <select value={item.fontFamily} onChange={(e) => update('fontFamily', e.target.value)}
+              className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-violet-300 bg-white">
+              {FONT_FAMILIES.map((f) => <option key={f.value} value={f.value}>{f.label}</option>)}
+            </select>
+          </div>
+          <Slider label="폰트 크기" value={item.fontSize} min={10} max={200} unit="px"
+            onChange={(v) => update('fontSize', v)} />
+          <div className="grid grid-cols-2 gap-3">
+            <ColorPicker label="텍스트 색상" value={item.fillColor} onChange={(v) => update('fillColor', v)} />
+            <ColorPicker label="외곽선 색상" value={item.strokeColor} onChange={(v) => update('strokeColor', v)} />
+          </div>
+          <Slider label="외곽선 두께" value={item.strokeWidth} min={0} max={20} unit="px"
+            onChange={(v) => update('strokeWidth', v)} />
+          <div className="flex items-center justify-between pt-1">
+            <label className="flex items-center gap-2 cursor-pointer select-none">
+              <input type="checkbox" checked={item.uppercase} onChange={(e) => update('uppercase', e.target.checked)}
+                className="w-4 h-4 accent-violet-600" />
+              <span className="text-sm font-semibold text-gray-700">대문자 변환</span>
+            </label>
+            <Button variant="danger" size="sm" onClick={() => onDelete(item.id)}>🗑 삭제</Button>
+          </div>
+        </div>
+      );
+    }
+
+    // ========================================
+    // Emoji Editor Panel
+    // ========================================
+
+    function EmojiEditor({ item, onChange, onDelete }) {
+      return (
+        <div className="space-y-4 animate-pop mb-5 p-4 bg-violet-50 rounded-2xl border border-violet-100">
+          <div className="flex items-center justify-between">
+            <span className="text-sm font-semibold text-gray-700">선택된 이모지</span>
+            <Button variant="danger" size="sm" onClick={() => onDelete(item.id)}>🗑 삭제</Button>
+          </div>
+          <div className="text-center text-6xl py-2 bg-white rounded-xl shadow-inner">{item.emoji}</div>
+          <Slider label="크기" value={item.size} min={20} max={300} unit="px"
+            onChange={(v) => onChange({ ...item, size: v })} />
+          <p className="text-xs text-gray-400 text-center">캔버스에서 드래그해 위치를 이동하세요</p>
+        </div>
+      );
+    }
+
+    // ========================================
+    // Emoji Picker
+    // ========================================
+
+    function EmojiPicker({ onAdd }) {
+      return (
+        <div>
+          <p className="text-sm font-semibold text-gray-700 mb-2">이모지 팔레트 — 클릭해서 추가</p>
+          <div className="flex flex-wrap gap-1 max-h-48 overflow-y-auto pr-1">
+            {EMOJI_LIST.map((emoji) => (
+              <button key={emoji} onClick={() => onAdd(emoji)}
+                className="text-2xl p-1.5 rounded-xl hover:bg-violet-100 hover:scale-125 transition-all leading-none">
+                {emoji}
+              </button>
+            ))}
+          </div>
+        </div>
+      );
+    }
+
+    // ========================================
+    // App
+    // ========================================
+
+    function App() {
+      const [image, setImage] = useState(null);
+      const [texts, setTexts] = useState([]);
+      const [emojis, setEmojis] = useState([]);
+      const [selectedId, setSelectedId] = useState(null);
+      const [selectedKind, setSelectedKind] = useState(null);
+      const [activeTab, setActiveTab] = useState('text');
+      const canvasRef = useRef(null);
+
+      const selectedText = texts.find((t) => t.id === selectedId) || null;
+      const selectedEmoji = emojis.find((e) => e.id === selectedId) || null;
+
+      const handleImageLoad = (img) => {
+        setImage(img);
+        const w = img.naturalWidth, h = img.naturalHeight;
+        setTexts([
+          makeTextItem('상단 텍스트', 'top', w, h),
+          makeTextItem('하단 텍스트', 'bottom', w, h),
+        ]);
+        setEmojis([]);
+        setSelectedId(null);
+        setSelectedKind(null);
+      };
+
+      const handleSelect = (id, kind) => {
+        setSelectedId(id);
+        setSelectedKind(kind);
+        if (kind === 'emoji') setActiveTab('emoji');
+        else if (kind === 'text') setActiveTab('text');
+      };
+
+      // Text handlers
+      const updateText = (updated) => setTexts((prev) => prev.map((t) => t.id === updated.id ? updated : t));
+      const moveText = useCallback((id, x, y) => setTexts((prev) => prev.map((t) => t.id === id ? { ...t, x, y } : t)), []);
+      const deleteText = (id) => {
+        setTexts((prev) => prev.filter((t) => t.id !== id));
+        if (selectedId === id) { setSelectedId(null); setSelectedKind(null); }
+      };
+      const addText = () => {
+        if (!image) return;
+        const item = makeTextItem('새 텍스트', 'top', image.naturalWidth, image.naturalHeight);
+        item.y = image.naturalHeight / 2;
+        setTexts((prev) => [...prev, item]);
+        setSelectedId(item.id);
+        setSelectedKind('text');
+        setActiveTab('text');
+      };
+
+      // Emoji handlers
+      const addEmoji = (emoji) => {
+        if (!image) return;
+        const item = makeEmojiItem(emoji, image.naturalWidth, image.naturalHeight);
+        setEmojis((prev) => [...prev, item]);
+        setSelectedId(item.id);
+        setSelectedKind('emoji');
+      };
+      const updateEmoji = (updated) => setEmojis((prev) => prev.map((e) => e.id === updated.id ? updated : e));
+      const moveEmoji = useCallback((id, x, y) => setEmojis((prev) => prev.map((e) => e.id === id ? { ...e, x, y } : e)), []);
+      const deleteEmoji = (id) => {
+        setEmojis((prev) => prev.filter((e) => e.id !== id));
+        if (selectedId === id) { setSelectedId(null); setSelectedKind(null); }
+      };
+
+      const reset = () => { setImage(null); setTexts([]); setEmojis([]); setSelectedId(null); setSelectedKind(null); };
+
+      const download = () => {
+        const canvas = canvasRef.current;
+        if (!canvas) return;
+        const link = document.createElement('a');
+        link.download = `meme-${Date.now()}.png`;
+        link.href = canvas.toDataURL('image/png');
+        link.click();
+      };
+
+      const tabBase = 'flex-1 py-2 text-sm font-bold rounded-xl transition-all';
+      const tabActive = 'bg-violet-600 text-white shadow-md';
+      const tabInactive = 'text-gray-500 hover:text-gray-700 hover:bg-gray-100';
+
+      return (
+        <div className="max-w-7xl mx-auto px-4 py-6 md:py-10">
+          <header className="text-center mb-8">
+            <h1 className="text-4xl md:text-5xl font-black tracking-tight">
+              <span className="bg-gradient-to-r from-violet-600 via-fuchsia-500 to-rose-500 bg-clip-text text-transparent">짤 생성기</span>
+              <span className="ml-2">🎭</span>
+            </h1>
+            <p className="text-gray-500 mt-2 font-medium">이미지에 텍스트와 이모지를 얹어 나만의 밈을 만들어보세요!</p>
+          </header>
+
+          {!image ? (
+            <Card className="p-6 md:p-10 max-w-2xl mx-auto">
+              <ImageUploader onImageLoad={handleImageLoad} />
+            </Card>
+          ) : (
+            <div className="grid lg:grid-cols-[1fr_360px] gap-6 items-start">
+              {/* Preview */}
+              <Card className="p-4 md:p-6">
+                <div className="flex items-center justify-between mb-4">
+                  <h2 className="font-bold text-gray-800">🎨 미리보기</h2>
+                  <span className="text-xs text-gray-400">텍스트/이모지를 드래그해 이동</span>
+                </div>
+                <MemeCanvas
+                  image={image} texts={texts} emojis={emojis}
+                  selectedId={selectedId}
+                  onSelect={handleSelect}
+                  onMoveText={moveText}
+                  onMoveEmoji={moveEmoji}
+                  canvasRef={canvasRef}
+                />
+                <div className="flex flex-wrap gap-3 mt-5">
+                  <Button variant="success" size="lg" onClick={download} className="flex-1 min-w-[140px]">⬇️ PNG 다운로드</Button>
+                  <Button variant="secondary" onClick={addText}>➕ 텍스트</Button>
+                  <Button variant="ghost" onClick={reset}>🔄 새 이미지</Button>
+                </div>
+              </Card>
+
+              {/* Controls */}
+              <Card className="p-5 lg:sticky lg:top-6">
+                {/* Tabs */}
+                <div className="flex gap-1.5 bg-gray-100 p-1 rounded-xl mb-5">
+                  <button className={`${tabBase} ${activeTab === 'text' ? tabActive : tabInactive}`}
+                    onClick={() => setActiveTab('text')}>✏️ 텍스트</button>
+                  <button className={`${tabBase} ${activeTab === 'emoji' ? tabActive : tabInactive}`}
+                    onClick={() => setActiveTab('emoji')}>😄 이모지</button>
+                </div>
+
+                {/* Text tab */}
+                {activeTab === 'text' && (
+                  <div>
+                    <div className="flex flex-wrap gap-2 mb-4">
+                      {texts.map((t, i) => (
+                        <button key={t.id} onClick={() => handleSelect(t.id, 'text')}
+                          className={`px-3 py-1.5 rounded-full text-xs font-bold max-w-[140px] truncate transition-all ${
+                            selectedId === t.id ? 'bg-violet-600 text-white shadow-md' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                          }`}>
+                          {t.text || `텍스트 ${i + 1}`}
+                        </button>
+                      ))}
+                    </div>
+                    {selectedText ? (
+                      <TextEditor item={selectedText} onChange={updateText} onDelete={deleteText} />
+                    ) : (
+                      <div className="text-center py-8 text-gray-400">
+                        <div className="text-4xl mb-2">👆</div>
+                        <p className="text-sm font-medium">편집할 텍스트를 선택하거나<br/>캔버스에서 클릭하세요</p>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Emoji tab */}
+                {activeTab === 'emoji' && (
+                  <div>
+                    {selectedEmoji && (
+                      <EmojiEditor item={selectedEmoji} onChange={updateEmoji} onDelete={deleteEmoji} />
+                    )}
+                    <EmojiPicker onAdd={addEmoji} />
+                    {emojis.length > 0 && (
+                      <div className="flex flex-wrap gap-2 mt-4 pt-4 border-t border-gray-100">
+                        <p className="w-full text-xs text-gray-400 font-semibold mb-1">배치된 이모지</p>
+                        {emojis.map((e) => (
+                          <button key={e.id} onClick={() => handleSelect(e.id, 'emoji')}
+                            className={`text-xl p-1.5 rounded-xl transition-all border-2 ${
+                              selectedId === e.id ? 'border-violet-500 bg-violet-50 scale-110' : 'border-transparent bg-gray-100 hover:bg-gray-200'
+                            }`}>
+                            {e.emoji}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </Card>
+            </div>
+          )}
+
+          <footer className="text-center mt-12 text-xs text-gray-400">
+            Canvas API · React 18 · Tailwind CSS 로 제작된 짤 생성기
+          </footer>
+        </div>
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+  </script>
+</body>
+</html>

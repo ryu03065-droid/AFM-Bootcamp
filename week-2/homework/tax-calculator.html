@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>한국 세금 계산기</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+</head>
+<body class="bg-slate-100">
+  <div id="root"></div>
+  <script type="text/babel">
+    const { useState, useMemo } = React;
+
+    // ========================================
+    // 상수 / 데이터 (세율 테이블)
+    // ========================================
+    // 종합소득세 누진세율표 (2024 기준)
+    // limit: 해당 구간의 상한 (원), rate: 세율, deduction: 누진공제액 (원)
+    const INCOME_TAX_BRACKETS = [
+      { limit: 14_000_000,    rate: 0.06, deduction: 0,          label: "1,400만원 이하" },
+      { limit: 50_000_000,    rate: 0.15, deduction: 1_260_000,  label: "1,400만원 ~ 5,000만원" },
+      { limit: 88_000_000,    rate: 0.24, deduction: 5_760_000,  label: "5,000만원 ~ 8,800만원" },
+      { limit: 150_000_000,   rate: 0.35, deduction: 15_440_000, label: "8,800만원 ~ 1.5억" },
+      { limit: 300_000_000,   rate: 0.38, deduction: 19_940_000, label: "1.5억 ~ 3억" },
+      { limit: 500_000_000,   rate: 0.40, deduction: 25_940_000, label: "3억 ~ 5억" },
+      { limit: 1_000_000_000, rate: 0.42, deduction: 35_940_000, label: "5억 ~ 10억" },
+      { limit: Infinity,      rate: 0.45, deduction: 65_940_000, label: "10억 초과" },
+    ];
+
+    const VAT_RATE = 0.10; // 부가가치세 10%
+
+    // ========================================
+    // 유틸리티 함수
+    // ========================================
+    const formatWon = (n) =>
+      isNaN(n) ? "0" : Math.round(n).toLocaleString("ko-KR");
+
+    const parseNumber = (str) => {
+      const cleaned = String(str).replace(/[^0-9]/g, "");
+      return cleaned === "" ? 0 : parseInt(cleaned, 10);
+    };
+
+    // 종합소득세 계산: 세율표를 배열로 순회하며 구간을 찾는다
+    const calcIncomeTax = (income) => {
+      if (income <= 0) return null;
+      let matched = INCOME_TAX_BRACKETS[INCOME_TAX_BRACKETS.length - 1];
+      for (let i = 0; i < INCOME_TAX_BRACKETS.length; i++) {
+        const bracket = INCOME_TAX_BRACKETS[i];
+        if (income <= bracket.limit) {
+          matched = bracket;
+          break;
+        }
+      }
+      const tax = Math.max(0, income * matched.rate - matched.deduction);
+      return {
+        income,
+        rate: matched.rate,
+        deduction: matched.deduction,
+        label: matched.label,
+        tax,
+        afterTax: income - tax,
+      };
+    };
+
+    // 부가가치세 계산
+    const calcVat = (supply) => {
+      if (supply <= 0) return null;
+      const vat = supply * VAT_RATE;
+      return { supply, vat, total: supply + vat };
+    };
+
+    // ========================================
+    // 🎨 디자인 시스템 컴포넌트
+    // ========================================
+    function Card({ children, className = "" }) {
+      return (
+        <div className={`bg-white rounded-2xl shadow-lg ${className}`}>
+          {children}
+        </div>
+      );
+    }
+
+    function MoneyInput({ label, value, onChange, placeholder }) {
+      return (
+        <div>
+          <label className="block text-sm font-semibold text-slate-700 mb-2">
+            {label}
+          </label>
+          <div className="relative">
+            <input
+              type="text"
+              inputMode="numeric"
+              value={value === 0 ? "" : formatWon(value)}
+              onChange={(e) => onChange(parseNumber(e.target.value))}
+              placeholder={placeholder}
+              className="w-full px-4 py-3 pr-12 text-right text-lg font-medium border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition"
+            />
+            <span className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 font-medium">
+              원
+            </span>
+          </div>
+        </div>
+      );
+    }
+
+    function TabButton({ active, onClick, children }) {
+      return (
+        <button
+          onClick={onClick}
+          className={`flex-1 py-3 px-4 rounded-xl text-sm sm:text-base font-bold transition-all ${
+            active
+              ? "bg-indigo-600 text-white shadow-md"
+              : "bg-transparent text-slate-500 hover:text-slate-700"
+          }`}
+        >
+          {children}
+        </button>
+      );
+    }
+
+    function ResultRow({ label, value, strong = false, accent = false }) {
+      return (
+        <div
+          className={`flex justify-between items-center py-3 ${
+            strong ? "" : "border-b border-slate-100"
+          }`}
+        >
+          <span
+            className={`${
+              strong ? "text-base font-bold text-slate-800" : "text-sm text-slate-500"
+            }`}
+          >
+            {label}
+          </span>
+          <span
+            className={`${
+              strong
+                ? "text-2xl font-extrabold"
+                : "text-base font-semibold text-slate-700"
+            } ${accent ? "text-indigo-600" : strong ? "text-slate-900" : ""}`}
+          >
+            {value}
+          </span>
+        </div>
+      );
+    }
+
+    // ========================================
+    // 📄 페이지 컴포넌트 — 종합소득세
+    // ========================================
+    function IncomeTaxPanel() {
+      const [income, setIncome] = useState(0);
+      const result = useMemo(() => calcIncomeTax(income), [income]);
+
+      return (
+        <div className="space-y-6">
+          <MoneyInput
+            label="연간 과세표준 (소득금액)"
+            value={income}
+            onChange={setIncome}
+            placeholder="예: 50,000,000"
+          />
+
+          {result ? (
+            <Card className="p-5 bg-slate-50 border border-slate-100">
+              <div className="mb-3 inline-flex items-center gap-2 px-3 py-1 rounded-full bg-indigo-100 text-indigo-700 text-xs font-bold">
+                적용 구간: {result.label}
+              </div>
+              <ResultRow label="과세표준" value={`${formatWon(result.income)} 원`} />
+              <ResultRow
+                label="적용 세율"
+                value={`${(result.rate * 100).toFixed(0)} %`}
+              />
+              <ResultRow
+                label="누진공제액"
+                value={`- ${formatWon(result.deduction)} 원`}
+              />
+              <ResultRow
+                label="세후 소득"
+                value={`${formatWon(result.afterTax)} 원`}
+              />
+              <div className="mt-2 pt-2 border-t-2 border-slate-200">
+                <ResultRow
+                  label="산출세액"
+                  value={`${formatWon(result.tax)} 원`}
+                  strong
+                  accent
+                />
+              </div>
+              <p className="mt-3 text-xs text-slate-400 leading-relaxed">
+                계산식: 과세표준 × 세율 − 누진공제
+                <br />
+                {formatWon(result.income)} × {(result.rate * 100).toFixed(0)}% −{" "}
+                {formatWon(result.deduction)} = {formatWon(result.tax)} 원
+              </p>
+            </Card>
+          ) : (
+            <p className="text-center text-slate-400 py-8 text-sm">
+              소득금액을 입력하면 세액이 계산됩니다.
+            </p>
+          )}
+
+          {/* 세율표 안내 */}
+          <Card className="p-5 border border-slate-100">
+            <h3 className="text-sm font-bold text-slate-700 mb-3">
+              종합소득세 세율표 (2024 기준)
+            </h3>
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="text-slate-400 border-b border-slate-200">
+                    <th className="text-left py-2 font-medium">과세표준</th>
+                    <th className="text-right py-2 font-medium">세율</th>
+                    <th className="text-right py-2 font-medium">누진공제</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {INCOME_TAX_BRACKETS.map((b, i) => (
+                    <tr
+                      key={i}
+                      className={`border-b border-slate-100 ${
+                        result && result.label === b.label
+                          ? "bg-indigo-50 font-bold text-indigo-700"
+                          : "text-slate-600"
+                      }`}
+                    >
+                      <td className="py-2 text-left">{b.label}</td>
+                      <td className="py-2 text-right">{(b.rate * 100).toFixed(0)}%</td>
+                      <td className="py-2 text-right">{formatWon(b.deduction)}원</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </Card>
+        </div>
+      );
+    }
+
+    // ========================================
+    // 📄 페이지 컴포넌트 — 부가가치세
+    // ========================================
+    function VatPanel() {
+      const [supply, setSupply] = useState(0);
+      const result = useMemo(() => calcVat(supply), [supply]);
+
+      return (
+        <div className="space-y-6">
+          <MoneyInput
+            label="공급가액"
+            value={supply}
+            onChange={setSupply}
+            placeholder="예: 1,000,000"
+          />
+
+          {result ? (
+            <Card className="p-5 bg-slate-50 border border-slate-100">
+              <ResultRow label="공급가액" value={`${formatWon(result.supply)} 원`} />
+              <ResultRow
+                label="부가가치세 (10%)"
+                value={`${formatWon(result.vat)} 원`}
+              />
+              <div className="mt-2 pt-2 border-t-2 border-slate-200">
+                <ResultRow
+                  label="합계 금액"
+                  value={`${formatWon(result.total)} 원`}
+                  strong
+                  accent
+                />
+              </div>
+              <p className="mt-3 text-xs text-slate-400 leading-relaxed">
+                계산식: 공급가액 × 10% = 부가세
+                <br />
+                {formatWon(result.supply)} + {formatWon(result.vat)} ={" "}
+                {formatWon(result.total)} 원
+              </p>
+            </Card>
+          ) : (
+            <p className="text-center text-slate-400 py-8 text-sm">
+              공급가액을 입력하면 부가세가 계산됩니다.
+            </p>
+          )}
+        </div>
+      );
+    }
+
+    // ========================================
+    // 🚀 App 컴포넌트
+    // ========================================
+    function App() {
+      const [tab, setTab] = useState("income"); // income | vat
+
+      return (
+        <div className="min-h-screen flex items-start justify-center px-4 py-10">
+          <div className="w-full max-w-lg">
+            <header className="text-center mb-6">
+              <h1 className="text-3xl font-extrabold text-slate-800">
+                한국 세금 계산기
+              </h1>
+              <p className="mt-2 text-sm text-slate-500">
+                종합소득세와 부가가치세를 간편하게 계산하세요
+              </p>
+            </header>
+
+            <Card className="p-6 sm:p-8">
+              <div className="flex gap-2 p-1 bg-slate-100 rounded-2xl mb-6">
+                <TabButton
+                  active={tab === "income"}
+                  onClick={() => setTab("income")}
+                >
+                  종합소득세
+                </TabButton>
+                <TabButton active={tab === "vat"} onClick={() => setTab("vat")}>
+                  부가가치세
+                </TabButton>
+              </div>
+
+              {tab === "income" ? <IncomeTaxPanel /> : <VatPanel />}
+            </Card>
+
+            <p className="text-center text-xs text-slate-400 mt-6">
+              본 계산기는 참고용이며, 실제 세액은 공제 항목에 따라 달라질 수 있습니다.
+            </p>
+          </div>
+        </div>
+      );
+    }
+
+    // ========================================
+    // 렌더링
+    // ========================================
+    ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+  </script>
+</body>
+</html>

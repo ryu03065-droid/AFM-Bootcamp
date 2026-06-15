@@ -1,0 +1,399 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>콘텐츠 PDF 변환기</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <style>
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .spinner { animation: spin 0.8s linear infinite; }
+  </style>
+</head>
+<body class="bg-slate-100">
+  <div id="root"></div>
+  <script type="text/babel">
+    const { useState, useRef, useMemo, useCallback, useEffect } = React;
+
+    // ========================================
+    // Design System
+    // ========================================
+    function Button({ variant = "primary", size = "md", disabled = false, onClick, className = "", children, type = "button" }) {
+      const base = "inline-flex items-center justify-center font-medium rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-offset-1 disabled:opacity-50 disabled:cursor-not-allowed";
+      const variants = {
+        primary: "bg-indigo-600 text-white hover:bg-indigo-700 focus:ring-indigo-400",
+        secondary: "bg-slate-200 text-slate-800 hover:bg-slate-300 focus:ring-slate-400",
+        danger: "bg-red-100 text-red-700 hover:bg-red-200 focus:ring-red-300",
+        ghost: "bg-transparent text-slate-600 hover:bg-slate-100 focus:ring-slate-300",
+      };
+      const sizes = { sm: "px-2.5 py-1 text-sm", md: "px-4 py-2 text-sm", lg: "px-5 py-2.5 text-base" };
+      return (
+        <button type={type} onClick={onClick} disabled={disabled}
+          className={`${base} ${variants[variant]} ${sizes[size]} ${className}`}>
+          {children}
+        </button>
+      );
+    }
+
+    function Input({ label, value, onChange, placeholder = "", type = "text", className = "" }) {
+      return (
+        <div className={className}>
+          {label && <label className="block text-sm font-medium text-slate-700 mb-1">{label}</label>}
+          <input type={type} value={value} onChange={onChange} placeholder={placeholder}
+            className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:border-indigo-400" />
+        </div>
+      );
+    }
+
+    function Textarea({ value, onChange, placeholder = "", rows = 4, className = "" }) {
+      return (
+        <textarea value={value} onChange={onChange} placeholder={placeholder} rows={rows}
+          className={`w-full px-3 py-2 border border-slate-300 rounded-lg text-sm leading-relaxed resize-y focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:border-indigo-400 ${className}`} />
+      );
+    }
+
+    function Select({ label, value, onChange, options, className = "" }) {
+      return (
+        <div className={className}>
+          {label && <label className="block text-sm font-medium text-slate-700 mb-1">{label}</label>}
+          <select value={value} onChange={onChange}
+            className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:border-indigo-400">
+            {options.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+          </select>
+        </div>
+      );
+    }
+
+    function Card({ children, className = "" }) {
+      return <div className={`bg-white rounded-xl shadow-sm border border-slate-200 ${className}`}>{children}</div>;
+    }
+
+    // ========================================
+    // Constants
+    // ========================================
+    const FONT_SIZES = {
+      small:  { title: "22px", author: "13px", heading: "15px", body: "13px", lineHeight: "1.6" },
+      medium: { title: "28px", author: "14px", heading: "18px", body: "15px", lineHeight: "1.7" },
+      large:  { title: "34px", author: "16px", heading: "21px", body: "17px", lineHeight: "1.8" },
+    };
+    const MARGINS = {
+      narrow: "32px 36px",
+      normal: "48px 56px",
+      wide:   "64px 72px",
+    };
+
+    // A4: 794×1123px at 96dpi
+    const A4_W = 794;
+    const A4_H = 1123;
+
+    function formatToday() {
+      const d = new Date();
+      return `${d.getFullYear()}년 ${String(d.getMonth()+1).padStart(2,'0')}월 ${String(d.getDate()).padStart(2,'0')}일`;
+    }
+    function uid() { return Math.random().toString(36).slice(2,9); }
+
+    // ========================================
+    // Document content (rendered in hidden div)
+    // ========================================
+    function DocContent({ title, author, sections, fontKey, marginKey, today }) {
+      const f = FONT_SIZES[fontKey];
+      return (
+        <div style={{ padding: MARGINS[marginKey], boxSizing: "border-box", background: "#fff", fontFamily: "system-ui, sans-serif" }}>
+          <h1 style={{ fontSize: f.title, fontWeight: 700, lineHeight: 1.25, wordBreak: "break-word", margin: 0 }}>
+            {title || "문서 제목"}
+          </h1>
+          <p style={{ fontSize: f.author, color: "#475569", marginTop: "8px", marginBottom: "2px" }}>
+            작성자: {author || "이름 미입력"}
+          </p>
+          <p style={{ fontSize: f.author, color: "#94a3b8", margin: 0 }}>{today}</p>
+          <hr style={{ border: "none", borderTop: "1px solid #cbd5e1", margin: "16px 0 20px" }} />
+          {sections.length === 0 && (
+            <p style={{ fontSize: f.body, color: "#94a3b8" }}>섹션을 추가하면 이곳에 표시됩니다.</p>
+          )}
+          {sections.map((s) => (
+            <div key={s.id} style={{ marginBottom: "24px" }}>
+              {s.heading && (
+                <h2 style={{ fontSize: f.heading, fontWeight: 600, marginBottom: "8px", color: "#1e293b", wordBreak: "break-word", marginTop: 0 }}>
+                  {s.heading}
+                </h2>
+              )}
+              {s.image && (
+                <img src={s.image} alt="" style={{ maxWidth: "100%", marginBottom: "10px", borderRadius: "4px", display: "block" }} />
+              )}
+              {s.content && (
+                <p style={{ fontSize: f.body, lineHeight: f.lineHeight, color: "#334155", whiteSpace: "pre-wrap", wordBreak: "break-word", margin: 0 }}>
+                  {s.content}
+                </p>
+              )}
+            </div>
+          ))}
+        </div>
+      );
+    }
+
+    // ========================================
+    // Section Editor
+    // ========================================
+    function SectionEditor({ section, index, onChange, onRemove }) {
+      return (
+        <Card className="p-4">
+          <div className="flex items-center justify-between mb-3">
+            <span className="text-xs font-semibold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded">섹션 {index + 1}</span>
+            <Button variant="danger" size="sm" onClick={() => onRemove(section.id)}>삭제</Button>
+          </div>
+          <Input label="소제목" value={section.heading}
+            onChange={(e) => onChange(section.id, "heading", e.target.value)}
+            placeholder="섹션 소제목을 입력하세요" className="mb-3" />
+          <div className="mb-3">
+            <label className="block text-sm font-medium text-slate-700 mb-1">이미지</label>
+            {section.image ? (
+              <div className="relative">
+                <img src={section.image} alt="섹션 이미지"
+                  className="w-full max-h-48 object-contain rounded-lg border border-slate-200 bg-slate-50" />
+                <button onClick={() => onChange(section.id, "image", null)}
+                  className="absolute top-1.5 right-1.5 w-6 h-6 flex items-center justify-center bg-red-100 hover:bg-red-200 text-red-600 rounded-full text-xs font-bold">
+                  ✕
+                </button>
+              </div>
+            ) : (
+              <label className="flex flex-col items-center justify-center gap-1.5 w-full h-20 border-2 border-dashed border-slate-300 rounded-lg cursor-pointer hover:border-indigo-400 hover:bg-indigo-50 transition-colors">
+                <span className="text-xl">🖼️</span>
+                <span className="text-xs text-slate-400">클릭해서 이미지 업로드</span>
+                <input type="file" accept="image/*" className="hidden"
+                  onChange={(e) => {
+                    const file = e.target.files[0];
+                    if (!file) return;
+                    const reader = new FileReader();
+                    reader.onload = (ev) => onChange(section.id, "image", ev.target.result);
+                    reader.readAsDataURL(file);
+                  }} />
+              </label>
+            )}
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">내용</label>
+            <Textarea value={section.content}
+              onChange={(e) => onChange(section.id, "content", e.target.value)}
+              placeholder="이 섹션의 내용을 작성하세요" rows={5} />
+          </div>
+        </Card>
+      );
+    }
+
+    // ========================================
+    // App
+    // ========================================
+    function App() {
+      const today = useMemo(() => formatToday(), []);
+      const [title, setTitle] = useState("나의 첫 문서");
+      const [author, setAuthor] = useState("");
+      const [fontKey, setFontKey] = useState("medium");
+      const [marginKey, setMarginKey] = useState("normal");
+      const [sections, setSections] = useState([
+        { id: uid(), heading: "들어가며", content: "여기에 내용을 작성하세요.", image: null },
+      ]);
+      const [previewPages, setPreviewPages] = useState([]);
+      const [previewLoading, setPreviewLoading] = useState(false);
+      const [generating, setGenerating] = useState(false);
+
+      const hiddenRef = useRef(null);
+      const debounceRef = useRef(null);
+
+      // --- Section handlers ---
+      const addSection = () => setSections((p) => [...p, { id: uid(), heading: "", content: "", image: null }]);
+      const removeSection = (id) => setSections((p) => p.filter((s) => s.id !== id));
+      const updateSection = (id, field, value) =>
+        setSections((p) => p.map((s) => (s.id === id ? { ...s, [field]: value } : s)));
+
+      // --- Generate page images from hidden div ---
+      const generatePages = useCallback(() => {
+        if (debounceRef.current) clearTimeout(debounceRef.current);
+        setPreviewLoading(true);
+        debounceRef.current = setTimeout(async () => {
+          if (!hiddenRef.current) { setPreviewLoading(false); return; }
+          try {
+            const canvas = await html2canvas(hiddenRef.current, {
+              scale: 2,
+              useCORS: true,
+              allowTaint: true,
+              backgroundColor: "#ffffff",
+              logging: false,
+            });
+            // A4 page height at this canvas width
+            const pw = canvas.width;
+            const ph = Math.round(pw * (A4_H / A4_W));
+            // 하단 여백: 48px (scale 2 → 96 canvas px) — 내용이 페이지 끝에 닿지 않도록
+            const bottomPad = 96;
+            const contentH = ph - bottomPad;
+            const numPages = Math.max(1, Math.ceil(canvas.height / contentH));
+            const pages = [];
+            for (let i = 0; i < numPages; i++) {
+              const pc = document.createElement("canvas");
+              pc.width = pw;
+              pc.height = ph;
+              const ctx = pc.getContext("2d");
+              ctx.fillStyle = "#ffffff";
+              ctx.fillRect(0, 0, pw, ph);
+              ctx.drawImage(canvas, 0, -i * contentH);
+              pages.push(pc.toDataURL("image/png"));
+            }
+            setPreviewPages(pages);
+          } catch (e) {
+            console.error("html2canvas error:", e);
+          } finally {
+            setPreviewLoading(false);
+          }
+        }, 700);
+      }, []);
+
+      // Re-generate whenever content changes
+      useEffect(() => {
+        generatePages();
+      }, [title, author, sections, fontKey, marginKey, generatePages]);
+
+      // --- PDF download ---
+      const handleDownload = useCallback(async () => {
+        if (previewPages.length === 0) return;
+        setGenerating(true);
+        try {
+          const { jsPDF } = window.jspdf;
+          const pdf = new jsPDF("p", "mm", "a4");
+          previewPages.forEach((dataUrl, i) => {
+            if (i > 0) pdf.addPage();
+            pdf.addImage(dataUrl, "PNG", 0, 0, 210, 297);
+          });
+          const safeName = (title.trim() || "document").replace(/[\\/:*?"<>|]/g, "_");
+          pdf.save(`${safeName}.pdf`);
+        } catch (e) {
+          console.error(e);
+          alert("PDF 생성 중 오류가 발생했습니다.");
+        } finally {
+          setGenerating(false);
+        }
+      }, [previewPages, title]);
+
+      return (
+        <div className="min-h-screen">
+          {/* Hidden offscreen div — html2canvas capture target */}
+          <div ref={hiddenRef} style={{
+            position: "fixed", top: 0, left: "-9999px",
+            width: A4_W + "px", background: "#fff",
+            pointerEvents: "none", zIndex: -1,
+          }}>
+            <DocContent title={title} author={author} sections={sections}
+              fontKey={fontKey} marginKey={marginKey} today={today} />
+          </div>
+
+          {/* Header */}
+          <header className="bg-white border-b border-slate-200 sticky top-0 z-20">
+            <div className="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <span className="text-2xl">📄</span>
+                <h1 className="text-lg font-bold text-slate-800">콘텐츠 PDF 변환기</h1>
+              </div>
+              <Button onClick={handleDownload} disabled={generating || previewLoading || previewPages.length === 0} size="lg">
+                {generating ? (
+                  <span className="flex items-center gap-2">
+                    <span className="spinner inline-block w-4 h-4 border-2 border-white border-t-transparent rounded-full"></span>
+                    저장 중...
+                  </span>
+                ) : "PDF 저장"}
+              </Button>
+            </div>
+          </header>
+
+          <main className="max-w-7xl mx-auto px-4 py-6">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+
+              {/* Left: Editor */}
+              <div className="space-y-5">
+                <Card className="p-5 space-y-4">
+                  <h2 className="text-base font-semibold text-slate-800">문서 정보</h2>
+                  <Input label="문서 제목" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="문서 제목을 입력하세요" />
+                  <Input label="작성자 이름" value={author} onChange={(e) => setAuthor(e.target.value)} placeholder="작성자 이름" />
+                </Card>
+
+                <Card className="p-5">
+                  <h2 className="text-base font-semibold text-slate-800 mb-4">스타일 옵션</h2>
+                  <div className="grid grid-cols-2 gap-4">
+                    <Select label="폰트 크기" value={fontKey} onChange={(e) => setFontKey(e.target.value)}
+                      options={[
+                        { value: "small", label: "작게" },
+                        { value: "medium", label: "보통" },
+                        { value: "large", label: "크게" },
+                      ]} />
+                    <Select label="여백" value={marginKey} onChange={(e) => setMarginKey(e.target.value)}
+                      options={[
+                        { value: "narrow", label: "좁게" },
+                        { value: "normal", label: "보통" },
+                        { value: "wide", label: "넓게" },
+                      ]} />
+                  </div>
+                </Card>
+
+                <div className="flex items-center justify-between">
+                  <h2 className="text-base font-semibold text-slate-800">섹션 ({sections.length})</h2>
+                  <Button variant="secondary" size="sm" onClick={addSection}>+ 섹션 추가</Button>
+                </div>
+
+                <div className="space-y-4">
+                  {sections.length === 0 && (
+                    <Card className="p-8 text-center text-slate-400 text-sm">
+                      아직 섹션이 없습니다. "+ 섹션 추가"를 눌러 시작하세요.
+                    </Card>
+                  )}
+                  {sections.map((s, i) => (
+                    <SectionEditor key={s.id} section={s} index={i}
+                      onChange={updateSection} onRemove={removeSection} />
+                  ))}
+                </div>
+              </div>
+
+              {/* Right: Preview */}
+              <div className="lg:sticky lg:top-20 lg:self-start">
+                <div className="flex items-center justify-between mb-3">
+                  <h2 className="text-base font-semibold text-slate-800">실시간 미리보기</h2>
+                  <div className="flex items-center gap-2">
+                    {previewLoading && (
+                      <span className="flex items-center gap-1.5 text-xs text-slate-400">
+                        <span className="spinner inline-block w-3 h-3 border-2 border-slate-400 border-t-transparent rounded-full"></span>
+                        업데이트 중...
+                      </span>
+                    )}
+                    <span className="text-xs text-slate-400">A4</span>
+                  </div>
+                </div>
+
+                <div className="bg-slate-300 rounded-xl p-4 space-y-3 max-h-[calc(100vh-9rem)] overflow-y-auto">
+                  {previewPages.length === 0 && !previewLoading && (
+                    <div className="bg-white rounded shadow-md" style={{ aspectRatio: "210/297" }}>
+                      <div className="flex items-center justify-center h-full text-slate-300 text-sm">미리보기 생성 중...</div>
+                    </div>
+                  )}
+                  {previewPages.map((page, i) => (
+                    <div key={i}>
+                      <img src={page} alt={`페이지 ${i+1}`}
+                        style={{ width: "100%", display: "block", boxShadow: "0 4px 16px rgba(0,0,0,0.2)", borderRadius: "2px" }} />
+                      {previewPages.length > 1 && (
+                        <p className="text-center text-xs text-slate-400 mt-1">{i + 1} / {previewPages.length}</p>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+            </div>
+          </main>
+        </div>
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+  </script>
+</body>
+</html>
