@@ -1,0 +1,562 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>오늘의 날씨</title>
+  <script src="https://cdn.tailwindcss.com/3.4.16"></script>
+  <!-- ⚠️ 모든 CDN 버전 고정. Babel 은 반드시 7.x 로 고정 (8.x 미지원). -->
+  <script src="https://unpkg.com/react@18.3.1/umd/react.development.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone@7.25.9/babel.min.js"></script>
+  <style>
+    /* 가로 스크롤 영역 스크롤바 숨김 (Tailwind 미지원) */
+    .no-scrollbar::-webkit-scrollbar { display: none; }
+    .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+    @keyframes floaty {
+      0%, 100% { transform: translateY(0); }
+      50% { transform: translateY(-10px); }
+    }
+    .animate-floaty { animation: floaty 4s ease-in-out infinite; }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="text/babel">
+    const { useState, useEffect, useCallback } = React;
+
+    // ========================================
+    // 🌐 API 설정 & 데이터 fetch 로직
+    // ========================================
+    const API_KEY = "1d5926b624ef458b103acdefc47d5cbc";
+    const API_BASE = "https://api.openweathermap.org/data/2.5";
+    const GEO_BASE = "https://api.openweathermap.org/geo/1.0";
+    const DEFAULT_LOCATION = { lat: 37.5665, lon: 126.9780 }; // 서울
+
+    // 도시명 → 위/경도 후보 검색 (OpenWeatherMap Geocoding API)
+    const geocodeCity = async (query) => {
+      const res = await fetch(
+        `${GEO_BASE}/direct?q=${encodeURIComponent(query)}&limit=5&appid=${API_KEY}`
+      );
+      if (!res.ok) throw new Error("도시 검색에 실패했습니다.");
+      const json = await res.json();
+      return json.map((c) => ({
+        name: c.name,
+        // 한국어 이름이 있으면 우선 노출
+        localName: (c.local_names && c.local_names.ko) || c.name,
+        state: c.state || "",
+        country: c.country || "",
+        lat: c.lat,
+        lon: c.lon,
+      }));
+    };
+
+    // OpenWeatherMap weather[0].main → 기존 THEME 키 매핑
+    const conditionToTheme = (main) => {
+      switch (main) {
+        case "Clear":
+          return "sunny";
+        case "Clouds":
+          return "cloudy";
+        case "Rain":
+        case "Drizzle":
+        case "Thunderstorm":
+          return "rainy";
+        case "Snow":
+          return "snowy";
+        // Mist/Smoke/Haze/Fog/Dust/Sand/Ash/Squall/Tornado 등 → 가장 비슷한 cloudy 로 폴백
+        default:
+          return "cloudy";
+      }
+    };
+
+    // 현재 위치 가져오기 (실패 시 서울 폴백)
+    const getCurrentPosition = () =>
+      new Promise((resolve) => {
+        if (!navigator.geolocation) {
+          resolve(DEFAULT_LOCATION);
+          return;
+        }
+        navigator.geolocation.getCurrentPosition(
+          (pos) => resolve({ lat: pos.coords.latitude, lon: pos.coords.longitude }),
+          () => resolve(DEFAULT_LOCATION),
+          { timeout: 8000 }
+        );
+      });
+
+    // UV 지수 (무료 플랜 제한 → 실패 시 null)
+    const fetchUv = async (lat, lon) => {
+      try {
+        const res = await fetch(`${API_BASE}/uvi?lat=${lat}&lon=${lon}&appid=${API_KEY}`);
+        if (!res.ok) return null;
+        const json = await res.json();
+        return typeof json.value === "number" ? Math.round(json.value) : null;
+      } catch {
+        return null;
+      }
+    };
+
+    // 한국시간(KST, Asia/Seoul) 기준 날짜 구성요소 추출
+    // Date.prototype.getMonth()/getDate()/getHours()/getDay() 는 브라우저 로컬 타임존을
+    // 쓰므로 직접 쓰지 않고, Intl.DateTimeFormat 으로 KST 기준 값을 뽑아낸다.
+    const KST = "Asia/Seoul";
+    const KST_WEEKDAY_TO_IDX = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
+    const getKstParts = (date) => {
+      const parts = new Intl.DateTimeFormat("en-CA", {
+        timeZone: KST,
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+        hour: "2-digit",
+        hour12: false,
+        weekday: "short",
+      }).formatToParts(date);
+      const m = {};
+      parts.forEach((p) => {
+        m[p.type] = p.value;
+      });
+      // hour 가 "24"로 나오는 환경(en-CA 자정) 보정
+      let hour = parseInt(m.hour, 10);
+      if (hour === 24) hour = 0;
+      return {
+        year: parseInt(m.year, 10),
+        month: parseInt(m.month, 10), // 1~12
+        day: parseInt(m.day, 10),
+        hour,
+        weekday: KST_WEEKDAY_TO_IDX[m.weekday], // 0(일)~6(토)
+      };
+    };
+
+    // KST 기준 "YYYY-M-D" 키 (날짜 그룹핑/비교용)
+    const getKstDayKey = (date) => {
+      const p = getKstParts(date);
+      return `${p.year}-${p.month}-${p.day}`;
+    };
+
+    // 시간 라벨 (예: 15시) — KST 기준
+    const hourLabel = (dt) => `${getKstParts(new Date(dt * 1000)).hour}시`;
+
+    // forecast list → 일별 그룹핑 후 5일치 최고/최저 계산
+    const buildWeekly = (list) => {
+      const byDay = {};
+      list.forEach((item) => {
+        const d = new Date(item.dt * 1000);
+        const key = getKstDayKey(d); // KST 기준 날짜로 그룹핑
+        if (!byDay[key]) {
+          byDay[key] = { weekday: getKstParts(d).weekday, temps: [], conditions: {} };
+        }
+        byDay[key].temps.push(item.main.temp);
+        const cond = conditionToTheme(item.weather[0].main);
+        byDay[key].conditions[cond] = (byDay[key].conditions[cond] || 0) + 1;
+      });
+
+      const todayKey = getKstDayKey(new Date()); // KST 기준 오늘
+
+      return Object.entries(byDay)
+        .slice(0, 5)
+        .map(([key, v], idx) => {
+          // 그 날 가장 빈번한 상태
+          const condition = Object.entries(v.conditions).sort((a, b) => b[1] - a[1])[0][0];
+          let day;
+          if (key === todayKey) day = "오늘";
+          else day = WEEKDAYS[v.weekday];
+          return {
+            day,
+            condition,
+            max: Math.round(Math.max(...v.temps)),
+            min: Math.round(Math.min(...v.temps)),
+          };
+        });
+    };
+
+    // 현재 날씨 + 예보 통합 fetch
+    const fetchWeather = async (lat, lon) => {
+      const [curRes, fcRes] = await Promise.all([
+        fetch(`${API_BASE}/weather?lat=${lat}&lon=${lon}&appid=${API_KEY}&units=metric&lang=kr`),
+        fetch(`${API_BASE}/forecast?lat=${lat}&lon=${lon}&appid=${API_KEY}&units=metric&lang=kr`),
+      ]);
+
+      if (!curRes.ok || !fcRes.ok) {
+        throw new Error("날씨 데이터를 불러오지 못했습니다.");
+      }
+
+      const cur = await curRes.json();
+      const fc = await fcRes.json();
+      const uvIndex = await fetchUv(lat, lon);
+
+      const condition = conditionToTheme(cur.weather[0].main);
+
+      const hourly = fc.list.slice(0, 8).map((item, i) => ({
+        time: i === 0 ? "지금" : hourLabel(item.dt),
+        temp: Math.round(item.main.temp),
+        condition: conditionToTheme(item.weather[0].main),
+      }));
+
+      return {
+        city: cur.name,
+        date: new Date(),
+        condition,
+        conditionLabel: cur.weather[0].description || THEME[condition].label,
+        temp: Math.round(cur.main.temp),
+        feelsLike: Math.round(cur.main.feels_like),
+        tempMax: Math.round(cur.main.temp_max),
+        tempMin: Math.round(cur.main.temp_min),
+        humidity: cur.main.humidity,
+        windSpeed: Math.round(cur.wind.speed * 10) / 10,
+        uvIndex, // null 가능
+        hourly,
+        weekly: buildWeekly(fc.list),
+      };
+    };
+
+    // 날씨 상태별 테마 (이모지 + 배경 그라데이션 + 텍스트 톤)
+    const THEME = {
+      sunny: {
+        emoji: "☀️",
+        label: "맑음",
+        bg: "from-sky-400 via-sky-500 to-blue-500",
+        accent: "text-yellow-100",
+      },
+      cloudy: {
+        emoji: "⛅",
+        label: "흐림",
+        bg: "from-slate-400 via-slate-500 to-slate-600",
+        accent: "text-slate-100",
+      },
+      rainy: {
+        emoji: "🌧️",
+        label: "비",
+        bg: "from-slate-600 via-blue-800 to-slate-900",
+        accent: "text-blue-100",
+      },
+      snowy: {
+        emoji: "❄️",
+        label: "눈",
+        bg: "from-sky-200 via-indigo-300 to-indigo-400",
+        accent: "text-white",
+      },
+    };
+
+    const WEEKDAYS = ["일", "월", "화", "수", "목", "금", "토"];
+    // 헤더 날짜 표시 — KST 기준 (예: "6월 20일 (토)")
+    const formatDate = (d) => {
+      const p = getKstParts(d);
+      return `${p.month}월 ${p.day}일 (${WEEKDAYS[p.weekday]})`;
+    };
+
+    const uvLabel = (v) => {
+      if (v <= 2) return "낮음";
+      if (v <= 5) return "보통";
+      if (v <= 7) return "높음";
+      if (v <= 10) return "매우 높음";
+      return "위험";
+    };
+
+    // ========================================
+    // 🎨 Design System Components
+    // ========================================
+    function GlassCard({ children, className = "" }) {
+      return (
+        <div className={`rounded-2xl bg-white/15 backdrop-blur-md ring-1 ring-white/20 p-4 ${className}`}>
+          {children}
+        </div>
+      );
+    }
+
+    function InfoCard({ icon, label, value, sub }) {
+      return (
+        <GlassCard className="flex flex-col gap-1">
+          <div className="flex items-center gap-1.5 text-xs text-white/70">
+            <span>{icon}</span>
+            <span>{label}</span>
+          </div>
+          <div className="text-2xl font-semibold leading-tight">{value}</div>
+          {sub && <div className="text-xs text-white/70">{sub}</div>}
+        </GlassCard>
+      );
+    }
+
+    // ========================================
+    // 🧩 섹션 컴포넌트
+    // ========================================
+    function CurrentWeather({ data, theme }) {
+      return (
+        <header className="text-center pt-8 pb-6">
+          <h1 className="text-xl font-medium">{data.city}</h1>
+          <p className="text-sm text-white/70 mt-0.5">{formatDate(data.date)}</p>
+
+          <div className="text-7xl my-4 animate-floaty" aria-hidden="true">
+            {theme.emoji}
+          </div>
+
+          <div className="flex items-start justify-center">
+            <span className="text-7xl font-thin tracking-tighter">{data.temp}</span>
+            <span className="text-3xl font-thin mt-2">°</span>
+          </div>
+
+          <p className="text-lg font-medium mt-1">{data.conditionLabel}</p>
+          <p className="text-sm text-white/80 mt-1">
+            체감 {data.feelsLike}° · 최고 {data.tempMax}° / 최저 {data.tempMin}°
+          </p>
+        </header>
+      );
+    }
+
+    function HourlyForecast({ hourly }) {
+      return (
+        <section aria-label="시간별 예보">
+          <h2 className="text-sm font-semibold text-white/80 mb-2 px-1">시간별 예보</h2>
+          <div className="flex gap-2 overflow-x-auto no-scrollbar pb-1 -mx-1 px-1">
+            {hourly.map((h, i) => (
+              <GlassCard
+                key={i}
+                className="flex-shrink-0 w-[68px] flex flex-col items-center gap-1.5 py-3"
+              >
+                <span className="text-xs text-white/75">{h.time}</span>
+                <span className="text-2xl" aria-hidden="true">{THEME[h.condition].emoji}</span>
+                <span className="text-sm font-semibold">{h.temp}°</span>
+              </GlassCard>
+            ))}
+          </div>
+        </section>
+      );
+    }
+
+    function WeeklyForecast({ weekly }) {
+      const allMin = Math.min(...weekly.map((d) => d.min));
+      const allMax = Math.max(...weekly.map((d) => d.max));
+      const range = allMax - allMin || 1;
+
+      return (
+        <section aria-label="주간 예보">
+          <h2 className="text-sm font-semibold text-white/80 mb-2 px-1">주간 예보</h2>
+          <GlassCard className="divide-y divide-white/10 !p-0">
+            {weekly.map((d, i) => {
+              const left = ((d.min - allMin) / range) * 100;
+              const width = ((d.max - d.min) / range) * 100;
+              return (
+                <div key={i} className="flex items-center gap-3 px-4 py-3">
+                  <span className="w-10 text-sm font-medium">{d.day}</span>
+                  <span className="text-xl w-7 text-center" aria-hidden="true">
+                    {THEME[d.condition].emoji}
+                  </span>
+                  <span className="w-8 text-sm text-white/70 text-right">{d.min}°</span>
+                  <div className="flex-1 h-1.5 rounded-full bg-white/20 relative">
+                    <div
+                      className="absolute h-full rounded-full bg-gradient-to-r from-cyan-200 to-amber-300"
+                      style={{ left: `${left}%`, width: `${Math.max(width, 8)}%` }}
+                    />
+                  </div>
+                  <span className="w-8 text-sm font-medium text-right">{d.max}°</span>
+                </div>
+              );
+            })}
+          </GlassCard>
+        </section>
+      );
+    }
+
+    // ========================================
+    // ⏳ 로딩 / ❗에러 화면
+    // ========================================
+    function LoadingScreen() {
+      return (
+        <div className="min-h-screen w-full bg-gradient-to-b from-sky-400 via-sky-500 to-blue-500 text-white flex flex-col items-center justify-center gap-4">
+          <div className="text-6xl animate-floaty" aria-hidden="true">⛅</div>
+          <div className="h-8 w-8 rounded-full border-4 border-white/30 border-t-white animate-spin" />
+          <p className="text-sm text-white/80">날씨 정보를 불러오는 중...</p>
+        </div>
+      );
+    }
+
+    function ErrorScreen({ message, onRetry }) {
+      return (
+        <div className="min-h-screen w-full bg-gradient-to-b from-slate-600 via-blue-800 to-slate-900 text-white flex flex-col items-center justify-center gap-4 px-6 text-center">
+          <div className="text-6xl" aria-hidden="true">🌧️</div>
+          <p className="text-base font-medium">{message}</p>
+          <button
+            onClick={onRetry}
+            className="mt-2 rounded-full bg-white/20 hover:bg-white/30 active:bg-white/40 ring-1 ring-white/30 px-6 py-2.5 text-sm font-semibold transition"
+          >
+            다시 시도
+          </button>
+        </div>
+      );
+    }
+
+    // ========================================
+    // 🔍 도시 검색 바
+    // ========================================
+    function SearchBar({ onSelectCity, onUseCurrentLocation }) {
+      const [query, setQuery] = useState("");
+      const [results, setResults] = useState(null); // null=미검색, []=결과없음
+      const [searching, setSearching] = useState(false);
+      const [searchError, setSearchError] = useState(null);
+
+      const handleSearch = async (e) => {
+        if (e) e.preventDefault();
+        const q = query.trim();
+        if (!q) return;
+        setSearching(true);
+        setSearchError(null);
+        setResults(null);
+        try {
+          const candidates = await geocodeCity(q);
+          if (candidates.length === 1) {
+            // 결과 1개면 바로 선택
+            onSelectCity(candidates[0]);
+            setQuery("");
+            setResults(null);
+          } else {
+            setResults(candidates);
+          }
+        } catch (err) {
+          setSearchError(err.message || "검색 중 오류가 발생했습니다.");
+        } finally {
+          setSearching(false);
+        }
+      };
+
+      const pickCity = (city) => {
+        onSelectCity(city);
+        setQuery("");
+        setResults(null);
+        setSearchError(null);
+      };
+
+      const countryName = (c) =>
+        [c.localName !== c.name ? c.localName : null, c.state, c.country]
+          .filter(Boolean)
+          .join(", ");
+
+      return (
+        <div className="pt-6">
+          <form onSubmit={handleSearch} className="flex gap-2">
+            <div className="relative flex-1">
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-white/60 text-sm" aria-hidden="true">🔍</span>
+              <input
+                type="text"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="도시 검색 (예: Seoul, 부산, Tokyo)"
+                aria-label="도시 검색"
+                className="w-full rounded-full bg-white/15 backdrop-blur-md ring-1 ring-white/20 pl-9 pr-3 py-2.5 text-sm placeholder-white/50 text-white focus:outline-none focus:ring-2 focus:ring-white/50 transition"
+              />
+            </div>
+            <button
+              type="submit"
+              disabled={searching}
+              className="flex-shrink-0 rounded-full bg-white/20 hover:bg-white/30 active:bg-white/40 ring-1 ring-white/30 px-4 py-2.5 text-sm font-semibold transition disabled:opacity-60"
+            >
+              {searching ? "검색중" : "검색"}
+            </button>
+            <button
+              type="button"
+              onClick={onUseCurrentLocation}
+              aria-label="현재 위치로 보기"
+              title="현재 위치로 보기"
+              className="flex-shrink-0 rounded-full bg-white/20 hover:bg-white/30 active:bg-white/40 ring-1 ring-white/30 px-3 py-2.5 text-sm font-semibold transition"
+            >
+              📍
+            </button>
+          </form>
+
+          {/* 검색 상태 표시 */}
+          {searchError && (
+            <p className="mt-2 px-1 text-sm text-white/80">{searchError}</p>
+          )}
+          {results && results.length === 0 && (
+            <p className="mt-2 px-1 text-sm text-white/80">검색 결과가 없습니다.</p>
+          )}
+          {results && results.length > 0 && (
+            <GlassCard className="mt-2 divide-y divide-white/10 !p-0 overflow-hidden">
+              {results.map((c, i) => (
+                <button
+                  key={i}
+                  onClick={() => pickCity(c)}
+                  className="w-full text-left px-4 py-3 hover:bg-white/10 active:bg-white/20 transition flex items-center justify-between gap-2"
+                >
+                  <span className="text-sm font-medium">{c.localName}</span>
+                  <span className="text-xs text-white/65">{countryName(c)}</span>
+                </button>
+              ))}
+            </GlassCard>
+          )}
+        </div>
+      );
+    }
+
+    // ========================================
+    // 🚀 App
+    // ========================================
+    function App() {
+      const [data, setData] = useState(null);
+      const [loading, setLoading] = useState(true);
+      const [error, setError] = useState(null);
+
+      // lat/lon이 주어지면 해당 위치, 없으면 현재 위치(geolocation) 날씨 로드
+      const loadWeather = useCallback(async (loc) => {
+        setLoading(true);
+        setError(null);
+        try {
+          const { lat, lon } = loc || (await getCurrentPosition());
+          const weather = await fetchWeather(lat, lon);
+          setData(weather);
+        } catch (e) {
+          setError(e.message || "알 수 없는 오류가 발생했습니다.");
+        } finally {
+          setLoading(false);
+        }
+      }, []);
+
+      // 현재 위치 기반 재로드 (재시도/현재 위치 버튼용)
+      const loadCurrent = useCallback(() => loadWeather(null), [loadWeather]);
+
+      // 검색 결과 도시 선택 → 해당 좌표로 갱신
+      const handleSelectCity = useCallback(
+        (city) => loadWeather({ lat: city.lat, lon: city.lon }),
+        [loadWeather]
+      );
+
+      useEffect(() => {
+        loadCurrent();
+      }, [loadCurrent]);
+
+      if (loading) return <LoadingScreen />;
+      if (error || !data) return <ErrorScreen message={error || "데이터가 없습니다."} onRetry={loadCurrent} />;
+
+      const theme = THEME[data.condition];
+
+      return (
+        <div className={`min-h-screen w-full bg-gradient-to-b ${theme.bg} text-white`}>
+          <div className="max-w-md mx-auto px-4 pb-10 flex flex-col gap-6">
+            <SearchBar onSelectCity={handleSelectCity} onUseCurrentLocation={loadCurrent} />
+            <CurrentWeather data={data} theme={theme} />
+
+            {/* 부가 정보 카드 그리드 */}
+            <section aria-label="상세 정보" className="grid grid-cols-2 gap-3">
+              <InfoCard icon="🌡️" label="최고/최저" value={`${data.tempMax}° / ${data.tempMin}°`} />
+              <InfoCard icon="💧" label="습도" value={`${data.humidity}%`} sub={data.humidity < 40 ? "건조" : "쾌적"} />
+              <InfoCard icon="🍃" label="바람" value={`${data.windSpeed} m/s`} />
+              {data.uvIndex != null ? (
+                <InfoCard icon="🔆" label="자외선" value={`${data.uvIndex}`} sub={uvLabel(data.uvIndex)} />
+              ) : (
+                <InfoCard icon="🔆" label="자외선" value="—" sub="정보 없음" />
+              )}
+            </section>
+
+            <HourlyForecast hourly={data.hourly} />
+            <WeeklyForecast weekly={data.weekly} />
+
+            <p className="text-center text-xs text-white/50 mt-2">
+              * OpenWeatherMap 실시간 데이터
+            </p>
+          </div>
+        </div>
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+  </script>
+</body>
+</html>
