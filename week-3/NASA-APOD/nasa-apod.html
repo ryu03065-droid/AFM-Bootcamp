@@ -1,0 +1,501 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NASA APOD · 오늘의 천문학 사진</title>
+  <script src="https://cdn.tailwindcss.com/3.4.16"></script>
+  <!-- 모든 CDN 버전 고정. Babel 은 반드시 7.x. -->
+  <script src="https://unpkg.com/react@18.3.1/umd/react.development.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone@7.25.9/babel.min.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,500;0,700;0,900;1,500&family=Inter:wght@300;400;500;600&family=Noto+Serif+KR:wght@400;600;900&display=swap" rel="stylesheet">
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            serif: ['"Playfair Display"', '"Noto Serif KR"', 'serif'],
+            sans: ['Inter', '"Noto Serif KR"', 'sans-serif'],
+          },
+          colors: {
+            ink: '#0a0a12',
+            cosmos: '#0d0d1a',
+            gold: '#d4af37',
+          },
+        },
+      },
+    };
+  </script>
+  <style>
+    html { scroll-behavior: smooth; }
+    body { background-color: #0a0a12; }
+    ::selection { background: #d4af37; color: #0a0a12; }
+    /* 별 배경 */
+    .starfield {
+      background-image:
+        radial-gradient(1px 1px at 20% 30%, rgba(255,255,255,.7), transparent),
+        radial-gradient(1px 1px at 60% 70%, rgba(255,255,255,.5), transparent),
+        radial-gradient(1.5px 1.5px at 80% 20%, rgba(255,255,255,.6), transparent),
+        radial-gradient(1px 1px at 40% 80%, rgba(255,255,255,.4), transparent),
+        radial-gradient(1px 1px at 90% 50%, rgba(255,255,255,.5), transparent),
+        radial-gradient(1.5px 1.5px at 10% 60%, rgba(255,255,255,.6), transparent);
+      background-repeat: repeat;
+      background-size: 600px 600px;
+    }
+    @keyframes spin-slow { to { transform: rotate(360deg); } }
+    .spin-slow { animation: spin-slow 1.2s linear infinite; }
+    @keyframes fade-up {
+      from { opacity: 0; transform: translateY(16px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .fade-up { animation: fade-up .6s ease-out both; }
+    .drop-cap::first-letter {
+      font-family: '"Playfair Display"', serif;
+      float: left;
+      font-size: 3.6rem;
+      line-height: .8;
+      padding: .1em .12em 0 0;
+      color: #d4af37;
+      font-weight: 700;
+    }
+    /* 커스텀 스크롤바 */
+    ::-webkit-scrollbar { width: 10px; }
+    ::-webkit-scrollbar-track { background: #0a0a12; }
+    ::-webkit-scrollbar-thumb { background: #2a2a3a; border-radius: 5px; }
+    ::-webkit-scrollbar-thumb:hover { background: #d4af37; }
+    /* date input 달력 아이콘 밝게 */
+    input[type="date"]::-webkit-calendar-picker-indicator { filter: invert(1); cursor: pointer; }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="text/babel">
+    const { useState, useEffect, useCallback, useRef } = React;
+
+    // ========================================
+    // 상수 / 유틸
+    // ========================================
+    const API_KEY = 'jPo5uf1mFuK5smZNMsqnPTbc09qm6SAaRbZVibXX';
+    const API_BASE_URL = 'https://api.nasa.gov/planetary/apod';
+    const APOD_EPOCH = '1995-06-16'; // APOD 최초 게시일
+
+    const todayStr = () => {
+      const d = new Date();
+      const off = d.getTimezoneOffset();
+      return new Date(d.getTime() - off * 60000).toISOString().slice(0, 10);
+    };
+
+    const formatDateKo = (iso) => {
+      if (!iso) return '';
+      const [y, m, d] = iso.split('-');
+      return `${y}년 ${parseInt(m, 10)}월 ${parseInt(d, 10)}일`;
+    };
+
+    const formatWeekday = (iso) => {
+      if (!iso) return '';
+      const days = ['일', '월', '화', '수', '목', '금', '토'];
+      return days[new Date(iso + 'T00:00:00').getDay()] + '요일';
+    };
+
+    const shiftDate = (iso, delta) => {
+      const d = new Date(iso + 'T00:00:00');
+      d.setDate(d.getDate() + delta);
+      const off = d.getTimezoneOffset();
+      return new Date(d.getTime() - off * 60000).toISOString().slice(0, 10);
+    };
+
+    // ========================================
+    // 🎨 Design System Components
+    // ========================================
+    function Spinner({ className = '' }) {
+      return (
+        <div className={`w-10 h-10 rounded-full border-2 border-white/15 border-t-gold spin-slow ${className}`} />
+      );
+    }
+
+    function Badge({ children, className = '' }) {
+      return (
+        <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-medium uppercase tracking-[0.18em] ${className}`}>
+          {children}
+        </span>
+      );
+    }
+
+    function IconButton({ children, onClick, disabled, label, className = '' }) {
+      return (
+        <button
+          type="button"
+          onClick={onClick}
+          disabled={disabled}
+          aria-label={label}
+          title={label}
+          className={`inline-flex items-center justify-center w-10 h-10 rounded-full border border-white/15 text-white/80
+            hover:border-gold hover:text-gold transition disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:border-white/15 disabled:hover:text-white/80 ${className}`}
+        >
+          {children}
+        </button>
+      );
+    }
+
+    // ========================================
+    // 🧩 Header
+    // ========================================
+    function Masthead() {
+      return (
+        <header className="relative z-10 border-b border-white/10">
+          <div className="max-w-6xl mx-auto px-5 sm:px-8 py-5 flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <svg className="w-7 h-7 text-gold" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                <circle cx="12" cy="12" r="9" />
+                <path d="M12 3a14 14 0 0 0 0 18M12 3a14 14 0 0 1 0 18M3 12h18" />
+              </svg>
+              <div className="leading-none">
+                <div className="text-[10px] tracking-[0.4em] text-gold/80 uppercase">Cosmos Magazine</div>
+                <div className="font-serif text-xl text-white">천문 화보</div>
+              </div>
+            </div>
+            <div className="hidden sm:block text-right text-[11px] tracking-[0.25em] text-white/40 uppercase">
+              NASA · Astronomy<br />Picture of the Day
+            </div>
+          </div>
+        </header>
+      );
+    }
+
+    // ========================================
+    // 🧩 날짜 선택 컨트롤
+    // ========================================
+    function DateControls({ date, onChange, loading }) {
+      const today = todayStr();
+      const isToday = date === today;
+      const atEpoch = date <= APOD_EPOCH;
+
+      return (
+        <div className="flex flex-wrap items-center justify-center gap-3 sm:gap-4">
+          <IconButton
+            label="이전 날짜"
+            disabled={loading || atEpoch}
+            onClick={() => onChange(shiftDate(date, -1))}
+          >
+            <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M15 18l-6-6 6-6" /></svg>
+          </IconButton>
+
+          <label className="relative flex items-center gap-2 px-4 py-2 rounded-full border border-white/15 bg-white/5 backdrop-blur">
+            <svg className="w-4 h-4 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><rect x="3" y="4" width="18" height="18" rx="2" /><path d="M16 2v4M8 2v4M3 10h18" /></svg>
+            <input
+              type="date"
+              value={date}
+              min={APOD_EPOCH}
+              max={today}
+              disabled={loading}
+              onChange={(e) => e.target.value && onChange(e.target.value)}
+              className="bg-transparent text-sm text-white outline-none [color-scheme:dark]"
+            />
+          </label>
+
+          <IconButton
+            label="다음 날짜"
+            disabled={loading || isToday}
+            onClick={() => onChange(shiftDate(date, 1))}
+          >
+            <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 18l6-6-6-6" /></svg>
+          </IconButton>
+
+          <button
+            type="button"
+            disabled={loading || isToday}
+            onClick={() => onChange(today)}
+            className="px-4 py-2 rounded-full text-xs font-medium uppercase tracking-[0.15em] border border-gold/40 text-gold
+              hover:bg-gold hover:text-ink transition disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-gold"
+          >
+            오늘
+          </button>
+        </div>
+      );
+    }
+
+    // ========================================
+    // 🧩 로딩 / 에러 상태
+    // ========================================
+    function LoadingState() {
+      return (
+        <div className="flex flex-col items-center justify-center py-32 gap-5 fade-up">
+          <Spinner />
+          <p className="text-white/50 text-sm tracking-[0.2em] uppercase">우주를 불러오는 중…</p>
+        </div>
+      );
+    }
+
+    function ErrorState({ message, onRetry }) {
+      return (
+        <div className="flex flex-col items-center justify-center py-28 gap-5 text-center fade-up">
+          <div className="w-16 h-16 rounded-full border border-red-400/40 flex items-center justify-center">
+            <svg className="w-7 h-7 text-red-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6"><circle cx="12" cy="12" r="9" /><path d="M12 8v5M12 16h.01" /></svg>
+          </div>
+          <div>
+            <h3 className="font-serif text-2xl text-white mb-2">사진을 불러오지 못했습니다</h3>
+            <p className="text-white/50 text-sm max-w-md leading-relaxed">{message}</p>
+          </div>
+          <button
+            onClick={onRetry}
+            className="mt-2 px-6 py-2.5 rounded-full text-sm font-medium uppercase tracking-[0.15em] bg-gold text-ink hover:bg-gold/90 transition"
+          >
+            다시 시도
+          </button>
+        </div>
+      );
+    }
+
+    // ========================================
+    // 🧩 미디어 (이미지 / 비디오) + 라이트박스
+    // ========================================
+    function Lightbox({ src, alt, onClose }) {
+      useEffect(() => {
+        const onKey = (e) => e.key === 'Escape' && onClose();
+        document.addEventListener('keydown', onKey);
+        document.body.style.overflow = 'hidden';
+        return () => {
+          document.removeEventListener('keydown', onKey);
+          document.body.style.overflow = '';
+        };
+      }, [onClose]);
+
+      return (
+        <div
+          className="fixed inset-0 z-50 bg-black/95 flex items-center justify-center p-4 fade-up"
+          onClick={onClose}
+          role="dialog"
+          aria-modal="true"
+        >
+          <button
+            onClick={onClose}
+            aria-label="닫기"
+            className="absolute top-5 right-5 w-11 h-11 rounded-full border border-white/20 text-white/80 hover:text-gold hover:border-gold transition flex items-center justify-center"
+          >
+            <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 6L6 18M6 6l12 12" /></svg>
+          </button>
+          <img
+            src={src}
+            alt={alt}
+            onClick={(e) => e.stopPropagation()}
+            className="max-w-full max-h-full object-contain rounded-lg shadow-2xl"
+          />
+          <a
+            href={src}
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={(e) => e.stopPropagation()}
+            className="absolute bottom-6 left-1/2 -translate-x-1/2 px-5 py-2 rounded-full text-xs uppercase tracking-[0.15em] bg-white/10 text-white hover:bg-gold hover:text-ink transition backdrop-blur"
+          >
+            새 탭에서 원본 열기 ↗
+          </a>
+        </div>
+      );
+    }
+
+    function HeroMedia({ data, onZoom }) {
+      if (data.media_type === 'video') {
+        return (
+          <div className="relative w-full aspect-video rounded-xl overflow-hidden border border-white/10 shadow-2xl bg-black">
+            <iframe
+              src={data.url}
+              title={data.title}
+              allow="accelerometer; autoplay; encrypted-media; gyroscope; picture-in-picture"
+              allowFullScreen
+              className="absolute inset-0 w-full h-full"
+            />
+          </div>
+        );
+      }
+
+      const big = data.hdurl || data.url;
+      return (
+        <figure className="group relative">
+          <div className="relative overflow-hidden rounded-xl border border-white/10 shadow-2xl">
+            <img
+              src={data.url}
+              alt={data.title}
+              loading="eager"
+              onClick={() => onZoom(big)}
+              className="w-full max-h-[78vh] object-cover cursor-zoom-in transition duration-700 group-hover:scale-[1.02]"
+            />
+            <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-ink/50 via-transparent to-transparent" />
+            <div className="absolute bottom-4 right-4 flex gap-2">
+              <button
+                onClick={() => onZoom(big)}
+                className="pointer-events-auto px-4 py-2 rounded-full text-xs uppercase tracking-[0.12em] bg-black/50 text-white backdrop-blur border border-white/15 hover:bg-gold hover:text-ink transition flex items-center gap-2"
+              >
+                <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="7" /><path d="M21 21l-4.3-4.3M11 8v6M8 11h6" /></svg>
+                확대
+              </button>
+              {data.hdurl && (
+                <a
+                  href={data.hdurl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="pointer-events-auto px-4 py-2 rounded-full text-xs uppercase tracking-[0.12em] bg-black/50 text-white backdrop-blur border border-white/15 hover:bg-gold hover:text-ink transition flex items-center gap-2"
+                >
+                  HD ↗
+                </a>
+              )}
+            </div>
+          </div>
+        </figure>
+      );
+    }
+
+    // ========================================
+    // 📄 매거진 레이아웃 (한 장의 화보)
+    // ========================================
+    function ApodFeature({ data, onZoom }) {
+      const wordCount = data.explanation ? data.explanation.trim().split(/\s+/).length : 0;
+      const readMin = Math.max(1, Math.round(wordCount / 200));
+
+      return (
+        <article className="fade-up">
+          {/* Kicker / 메타 */}
+          <div className="flex flex-wrap items-center justify-center gap-3 mb-6">
+            <Badge className="bg-gold/15 text-gold border border-gold/30">Issue · {data.date}</Badge>
+            <Badge className="bg-white/5 text-white/60 border border-white/10">
+              {data.media_type === 'video' ? '영상' : '사진'}
+            </Badge>
+            <Badge className="bg-white/5 text-white/60 border border-white/10">읽기 {readMin}분</Badge>
+          </div>
+
+          {/* 타이틀 */}
+          <div className="text-center max-w-4xl mx-auto mb-3">
+            <p className="text-gold/80 text-sm tracking-[0.3em] uppercase mb-4">
+              {formatDateKo(data.date)} · {formatWeekday(data.date)}
+            </p>
+            <h1 className="font-serif text-3xl sm:text-5xl lg:text-6xl text-white leading-[1.08] tracking-tight">
+              {data.title}
+            </h1>
+          </div>
+
+          {/* 장식 구분선 */}
+          <div className="flex items-center justify-center gap-3 my-8">
+            <span className="h-px w-12 bg-white/20" />
+            <span className="text-gold text-xs">✦</span>
+            <span className="h-px w-12 bg-white/20" />
+          </div>
+
+          {/* 히어로 미디어 */}
+          <HeroMedia data={data} onZoom={onZoom} />
+
+          {/* 캡션 / 저작권 */}
+          <div className="mt-4 flex flex-wrap items-center justify-between gap-2 text-[11px] tracking-[0.15em] uppercase text-white/40">
+            <span>NASA Astronomy Picture of the Day</span>
+            {data.copyright && (
+              <span className="text-white/55">© {data.copyright.replace(/\n/g, ' ').trim()}</span>
+            )}
+          </div>
+
+          {/* 본문 설명 */}
+          <div className="max-w-3xl mx-auto mt-14">
+            <div className="flex items-center gap-3 mb-6">
+              <span className="font-serif text-gold text-sm tracking-[0.3em] uppercase">The Story</span>
+              <span className="flex-1 h-px bg-white/10" />
+            </div>
+            <p className="drop-cap font-sans text-[1.07rem] leading-[2] text-white/80 text-justify">
+              {data.explanation}
+            </p>
+
+            {data.copyright && (
+              <div className="mt-12 pt-6 border-t border-white/10 text-center">
+                <p className="text-[11px] tracking-[0.25em] uppercase text-white/40 mb-1">Credit & Copyright</p>
+                <p className="font-serif text-lg text-white/80">{data.copyright.replace(/\n/g, ' ').trim()}</p>
+              </div>
+            )}
+          </div>
+        </article>
+      );
+    }
+
+    // ========================================
+    // 🚀 App
+    // ========================================
+    function App() {
+      const [date, setDate] = useState(todayStr());
+      const [data, setData] = useState(null);
+      const [loading, setLoading] = useState(true);
+      const [error, setError] = useState(null);
+      const [zoomSrc, setZoomSrc] = useState(null);
+      const topRef = useRef(null);
+
+      const fetchApod = useCallback(async (d) => {
+        setLoading(true);
+        setError(null);
+        try {
+          const res = await fetch(`${API_BASE_URL}?api_key=${API_KEY}&date=${d}&thumbs=true`);
+          if (!res.ok) {
+            if (res.status === 429) {
+              throw new Error('API 호출 한도를 초과했습니다 (DEMO_KEY는 시간당 횟수 제한이 있습니다). 잠시 후 다시 시도해 주세요.');
+            }
+            if (res.status === 404) {
+              throw new Error('해당 날짜의 사진을 찾을 수 없습니다. 다른 날짜를 선택해 주세요.');
+            }
+            const body = await res.json().catch(() => ({}));
+            throw new Error(body.msg || `요청에 실패했습니다 (오류 코드 ${res.status}).`);
+          }
+          const json = await res.json();
+          setData(json);
+        } catch (e) {
+          setError(e.message || '네트워크 오류가 발생했습니다. 연결 상태를 확인해 주세요.');
+          setData(null);
+        } finally {
+          setLoading(false);
+        }
+      }, []);
+
+      useEffect(() => { fetchApod(date); }, [date, fetchApod]);
+
+      const handleDateChange = (d) => {
+        setDate(d);
+        if (topRef.current) topRef.current.scrollIntoView({ behavior: 'smooth' });
+      };
+
+      return (
+        <div className="min-h-screen text-white">
+          {/* 배경 레이어 */}
+          <div className="fixed inset-0 starfield opacity-70 pointer-events-none" />
+          <div className="fixed inset-0 bg-gradient-to-b from-cosmos via-ink to-black pointer-events-none -z-10" />
+          <div className="fixed inset-0 bg-[radial-gradient(ellipse_at_top,rgba(80,60,140,0.25),transparent_60%)] pointer-events-none -z-10" />
+
+          <div ref={topRef} />
+          <Masthead />
+
+          {/* 컨트롤 바 */}
+          <div className="relative z-10 max-w-6xl mx-auto px-5 sm:px-8 pt-8 pb-2">
+            <DateControls date={date} onChange={handleDateChange} loading={loading} />
+          </div>
+
+          {/* 본문 */}
+          <main className="relative z-10 max-w-6xl mx-auto px-5 sm:px-8 py-8">
+            {loading && <LoadingState />}
+            {!loading && error && <ErrorState message={error} onRetry={() => fetchApod(date)} />}
+            {!loading && !error && data && <ApodFeature data={data} onZoom={setZoomSrc} />}
+          </main>
+
+          {/* 푸터 */}
+          <footer className="relative z-10 border-t border-white/10 mt-16">
+            <div className="max-w-6xl mx-auto px-5 sm:px-8 py-8 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-white/40 tracking-[0.15em] uppercase">
+              <span>Data · NASA Open APIs</span>
+              <span className="text-white/30">천문 화보 — Cosmos Magazine</span>
+            </div>
+          </footer>
+
+          {zoomSrc && <Lightbox src={zoomSrc} alt={data ? data.title : ''} onClose={() => setZoomSrc(null)} />}
+        </div>
+      );
+    }
+
+    // ========================================
+    // Rendering
+    // ========================================
+    ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+  </script>
+</body>
+</html>
