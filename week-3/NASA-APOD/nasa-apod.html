@@ -66,8 +66,16 @@
     ::-webkit-scrollbar-track { background: #0a0a12; }
     ::-webkit-scrollbar-thumb { background: #2a2a3a; border-radius: 5px; }
     ::-webkit-scrollbar-thumb:hover { background: #d4af37; }
-    /* date input 달력 아이콘 밝게 */
-    input[type="date"]::-webkit-calendar-picker-indicator { filter: invert(1); cursor: pointer; }
+    /* 커스텀 달력 아이콘만 노출, 브라우저 기본 아이콘은 숨김 (전체 영역은 여전히 클릭 가능) */
+    input[type="date"]::-webkit-calendar-picker-indicator {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      margin: 0;
+      opacity: 0;
+      cursor: pointer;
+    }
   </style>
 </head>
 <body>
