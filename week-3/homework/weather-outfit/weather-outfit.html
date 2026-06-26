@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>날씨 옷차림 추천</title>
+
+  <!-- ⚠️ 모든 CDN 버전 고정. Babel 은 7.x 로 고정 (8.x 인라인 text/babel 미지원). -->
+  <script src="https://cdn.tailwindcss.com/3.4.16"></script>
+  <script src="https://unpkg.com/react@18.3.1/umd/react.development.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone@7.25.9/babel.min.js"></script>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700;900&display=swap" rel="stylesheet">
+
+  <style>
+    * { font-family: 'Noto Sans KR', sans-serif; }
+
+    /* 배경 그라데이션 트랜지션 */
+    body { transition: background 0.8s ease; }
+
+    /* 카드 등장 애니메이션 */
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(16px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    .animate-fadeUp { animation: fadeUp 0.5s ease both; }
+
+    /* 로딩 스피너 */
+    @keyframes spin360 { to { transform: rotate(360deg); } }
+    .spinner { animation: spin360 0.8s linear infinite; }
+
+    /* 떠다니는 이모지 */
+    @keyframes floaty {
+      0%, 100% { transform: translateY(0); }
+      50%      { transform: translateY(-10px); }
+    }
+    .animate-floaty { animation: floaty 3s ease-in-out infinite; }
+  </style>
+</head>
+<body class="min-h-screen">
+  <div id="root"></div>
+
+  <script type="text/babel">
+    // ========================================
+    // React Hooks
+    // ========================================
+    const { useState, useEffect, useCallback } = React;
+
+    // ========================================
+    // 설정 / 상수
+    // ========================================
+    const API_BASE_URL = '/'; // 같은 서버(localhost:3000)에서 서빙 → 상대경로
+
+    const CITIES = [
+      { name: '서울', lat: 37.5665, lon: 126.9780 },
+      { name: '부산', lat: 35.1796, lon: 129.0756 },
+      { name: '제주', lat: 33.4996, lon: 126.5312 },
+      { name: '도쿄', lat: 35.6762, lon: 139.6503 },
+      { name: '뉴욕', lat: 40.7128, lon: -74.0060 },
+    ];
+
+    // 날씨 설명 키워드 → 배경 테마
+    function getTheme(desc) {
+      const d = desc || '';
+      if (d.includes('비') || d.includes('소나기'))
+        return { bg: 'linear-gradient(160deg, #64748b 0%, #94a3b8 55%, #cbd5e1 100%)', text: 'text-slate-700' };
+      if (d.includes('눈'))
+        return { bg: 'linear-gradient(160deg, #e0e7ff 0%, #f1f5f9 60%, #ffffff 100%)', text: 'text-slate-700' };
+      if (d.includes('흐림') || d.includes('구름'))
+        return { bg: 'linear-gradient(160deg, #cbd5e1 0%, #e2e8f0 55%, #f8fafc 100%)', text: 'text-slate-700' };
+      if (d.includes('안개'))
+        return { bg: 'linear-gradient(160deg, #d1d5db 0%, #e5e7eb 60%, #f9fafb 100%)', text: 'text-slate-700' };
+      // 맑음 / 기본
+      return { bg: 'linear-gradient(160deg, #38bdf8 0%, #7dd3fc 45%, #e0f2fe 100%)', text: 'text-sky-700' };
+    }
+
+    // ========================================
+    // 🎨 Design System Components
+    // ========================================
+    function Button({ children, onClick, disabled, className = '' }) {
+      return (
+        <button
+          onClick={onClick}
+          disabled={disabled}
+          className={`px-6 py-3 rounded-xl font-bold text-white shadow-md transition
+            bg-sky-500 hover:bg-sky-600 active:scale-95
+            disabled:opacity-50 disabled:cursor-not-allowed disabled:active:scale-100 ${className}`}
+        >
+          {children}
+        </button>
+      );
+    }
+
+    function Select({ value, onChange, options, disabled, className = '' }) {
+      return (
+        <select
+          value={value}
+          onChange={onChange}
+          disabled={disabled}
+          className={`px-5 py-3 rounded-xl font-medium text-slate-700 bg-white shadow-md
+            border border-slate-200 outline-none cursor-pointer
+            focus:ring-2 focus:ring-sky-400 transition ${className}`}
+        >
+          {options.map((opt, i) => (
+            <option key={i} value={i}>{opt.name}</option>
+          ))}
+        </select>
+      );
+    }
+
+    function Card({ children, className = '' }) {
+      return (
+        <div className={`bg-white/90 backdrop-blur rounded-3xl shadow-xl p-6 sm:p-8 ${className}`}>
+          {children}
+        </div>
+      );
+    }
+
+    function Spinner() {
+      return (
+        <div className="flex flex-col items-center gap-4 py-12" role="status" aria-live="polite">
+          <div className="w-12 h-12 rounded-full border-4 border-sky-200 border-t-sky-500 spinner"></div>
+          <p className="text-slate-500 font-medium">날씨를 불러오는 중...</p>
+        </div>
+      );
+    }
+
+    // ========================================
+    // 🧩 결과 표시 컴포넌트
+    // ========================================
+    function WeatherInfo({ data }) {
+      const stats = [
+        { label: '기온', value: `${Math.round(data.temperature)}°`, key: 't' },
+        { label: '체감', value: `${Math.round(data.feelsLike)}°`, key: 'f' },
+        { label: '풍속', value: `${data.windspeed} m/s`, key: 'w' },
+      ];
+      return (
+        <Card className="animate-fadeUp">
+          <p className="text-sm font-medium text-slate-400 mb-1">현재 날씨</p>
+          <h2 className="text-3xl sm:text-4xl font-black text-slate-800 mb-6">{data.weatherDesc}</h2>
+          <div className="grid grid-cols-3 gap-3">
+            {stats.map(s => (
+              <div key={s.key} className="rounded-2xl bg-sky-50 py-4 text-center">
+                <p className="text-xs font-medium text-slate-400 mb-1">{s.label}</p>
+                <p className="text-2xl font-bold text-slate-700">{s.value}</p>
+              </div>
+            ))}
+          </div>
+        </Card>
+      );
+    }
+
+    function OutfitCard({ rec }) {
+      const color = rec.color || '#fb923c';
+      return (
+        <Card
+          className="animate-fadeUp text-center border-t-8"
+          /* 포인트 색상을 카드 상단 보더로 활용 */
+        >
+          <div style={{ borderColor: color }}></div>
+          <p className="text-sm font-medium text-slate-400 mb-2">오늘의 옷차림 추천</p>
+          <div className="text-7xl sm:text-8xl mb-4 animate-floaty">{rec.emoji}</div>
+          <span
+            className="inline-block px-4 py-1 rounded-full text-sm font-bold text-white mb-4"
+            style={{ backgroundColor: color }}
+          >
+            {rec.level}
+          </span>
+          <h3 className="text-3xl sm:text-4xl font-black mb-3" style={{ color }}>
+            {rec.outfit}
+          </h3>
+          <p className="text-lg text-slate-600 font-medium">{rec.detail}</p>
+        </Card>
+      );
+    }
+
+    function ErrorMessage({ message, onRetry }) {
+      return (
+        <Card className="animate-fadeUp text-center">
+          <div className="text-6xl mb-4">😢</div>
+          <h3 className="text-xl font-bold text-slate-800 mb-2">날씨를 불러오지 못했어요</h3>
+          <p className="text-slate-500 mb-6">{message}</p>
+          <Button onClick={onRetry}>다시 시도</Button>
+        </Card>
+      );
+    }
+
+    // ========================================
+    // 🚀 App Component
+    // ========================================
+    function App() {
+      const [cityIdx, setCityIdx] = useState(0);
+      const [data, setData] = useState(null);
+      const [loading, setLoading] = useState(true);
+      const [error, setError] = useState(null);
+
+      const theme = getTheme(data?.weatherDesc);
+
+      // 배경 테마 적용
+      useEffect(() => {
+        document.body.style.background = theme.bg;
+      }, [theme.bg]);
+
+      const fetchWeather = useCallback(async (idx) => {
+        const city = CITIES[idx];
+        setLoading(true);
+        setError(null);
+        try {
+          const res = await fetch(`${API_BASE_URL}recommend?lat=${city.lat}&lon=${city.lon}`);
+          if (!res.ok) throw new Error(`서버 응답 오류 (${res.status})`);
+          const json = await res.json();
+          setData(json);
+        } catch (e) {
+          setError(e.message || '네트워크 오류가 발생했어요.');
+          setData(null);
+        } finally {
+          setLoading(false);
+        }
+      }, []);
+
+      // 페이지 로드 시 서울 자동 조회
+      useEffect(() => {
+        fetchWeather(0);
+      }, [fetchWeather]);
+
+      const handleSearch = () => fetchWeather(cityIdx);
+
+      return (
+        <div className="min-h-screen w-full px-4 py-8 sm:py-12">
+          <div className="max-w-md mx-auto">
+
+            {/* 헤더 */}
+            <header className="text-center mb-8">
+              <h1 className={`text-3xl sm:text-4xl font-black mb-2 ${theme.text} drop-shadow-sm`}>
+                🌈 오늘 뭐 입지?
+              </h1>
+              <p className="text-white/90 font-medium drop-shadow">날씨 맞춤 옷차림 추천</p>
+            </header>
+
+            {/* 검색 영역 */}
+            <div className="flex gap-2 mb-6">
+              <Select
+                value={cityIdx}
+                onChange={(e) => setCityIdx(Number(e.target.value))}
+                options={CITIES}
+                disabled={loading}
+                className="flex-1"
+              />
+              <Button onClick={handleSearch} disabled={loading} className="whitespace-nowrap">
+                날씨 확인
+              </Button>
+            </div>
+
+            {/* 결과 영역 */}
+            <div className="space-y-5">
+              {loading && <Card><Spinner /></Card>}
+              {!loading && error && <ErrorMessage message={error} onRetry={handleSearch} />}
+              {!loading && !error && data && (
+                <>
+                  <WeatherInfo data={data} />
+                  {data.recommendation && <OutfitCard rec={data.recommendation} />}
+                </>
+              )}
+            </div>
+
+            <footer className="text-center mt-10 text-white/80 text-sm drop-shadow">
+              데이터 제공: Open-Meteo
+            </footer>
+          </div>
+        </div>
+      );
+    }
+
+    // ========================================
+    // Rendering
+    // ========================================
+    ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+  </script>
+</body>
+</html>
