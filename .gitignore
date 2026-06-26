@@ -1,0 +1,11 @@
+# macOS
+.DS_Store
+
+# Playwright MCP logs
+.playwright-mcp/
+
+# Node
+node_modules/
+
+# Environment variables
+.env
