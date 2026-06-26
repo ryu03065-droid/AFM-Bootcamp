@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Ask Amy — 개인 Q&A 봇</title>
+
+  <!-- ⚠️ 모든 CDN 버전 고정. Babel 은 7.x 고정 (8.x 미지원). -->
+  <script src="https://cdn.tailwindcss.com/3.4.16"></script>
+  <script src="https://unpkg.com/react@18.3.1/umd/react.development.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone@7.25.9/babel.min.js"></script>
+
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Noto+Sans+KR:wght@400;500;700&display=swap" rel="stylesheet">
+
+  <style>
+    :root {
+      --bg: #0a0a0b;
+      --surface: #141417;
+      --accent: #8b5cf6;
+    }
+    html, body { background: var(--bg); }
+    body {
+      font-family: 'Inter', 'Noto Sans KR', system-ui, sans-serif;
+      -webkit-font-smoothing: antialiased;
+    }
+    /* 부드러운 배경 그라데이션 글로우 */
+    .glow {
+      background:
+        radial-gradient(600px circle at 20% 0%, rgba(139,92,246,0.18), transparent 45%),
+        radial-gradient(500px circle at 90% 10%, rgba(99,102,241,0.12), transparent 40%);
+    }
+    @keyframes fadeInUp {
+      from { opacity: 0; transform: translateY(10px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    .animate-fadeInUp { animation: fadeInUp 0.4s cubic-bezier(0.16,1,0.3,1) both; }
+
+    @keyframes bounceDot {
+      0%, 80%, 100% { transform: scale(0.6); opacity: 0.4; }
+      40% { transform: scale(1); opacity: 1; }
+    }
+    .typing-dot { animation: bounceDot 1.2s infinite ease-in-out both; }
+
+    /* 커스텀 스크롤바 */
+    ::-webkit-scrollbar { width: 8px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: #2a2a30; border-radius: 8px; }
+    ::-webkit-scrollbar-thumb:hover { background: #3a3a42; }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+
+  <script type="text/babel">
+    // ========================================
+    // React Hooks
+    // ========================================
+    const { useState, useRef, useEffect, useCallback } = React;
+
+    // ========================================
+    // API 설정
+    // ========================================
+    const API_BASE_URL = '/api';
+
+    // ========================================
+    // 🎨 Design System Components
+    // ========================================
+
+    // 간단한 마크다운 렌더러 (**굵게**, 줄바꿈, 글머리 기호)
+    function renderMarkdown(text) {
+      const lines = String(text).split('\n');
+      const elements = [];
+      lines.forEach((line, i) => {
+        // **굵게** 처리
+        const parts = line.split(/(\*\*[^*]+\*\*)/g).filter(Boolean);
+        const rendered = parts.map((part, j) => {
+          if (/^\*\*[^*]+\*\*$/.test(part)) {
+            return <strong key={j} className="font-semibold text-white">{part.slice(2, -2)}</strong>;
+          }
+          return <React.Fragment key={j}>{part}</React.Fragment>;
+        });
+        const isBullet = /^\s*[-•]\s+/.test(line);
+        elements.push(
+          <p
+            key={i}
+            className={isBullet ? 'pl-4 relative leading-relaxed' : 'leading-relaxed'}
+          >
+            {isBullet && <span className="absolute left-0 text-violet-400">•</span>}
+            {isBullet
+              ? rendered.map((r, k) => (typeof r === 'object' && r.props && typeof r.props.children === 'string')
+                  ? <React.Fragment key={k}>{r.props.children.replace(/^\s*[-•]\s+/, '')}</React.Fragment>
+                  : r)
+              : rendered}
+          </p>
+        );
+      });
+      return <div className="space-y-1">{elements}</div>;
+    }
+
+    function Avatar({ size = 'md', className = '' }) {
+      const sizes = { sm: 'w-9 h-9 text-base', md: 'w-16 h-16 text-2xl', lg: 'w-24 h-24 text-4xl' };
+      return (
+        <div className={`${sizes[size]} ${className} rounded-full grid place-items-center
+          bg-gradient-to-br from-violet-500 to-indigo-600 text-white font-bold
+          shadow-lg shadow-violet-900/40 ring-2 ring-white/10 select-none`}>
+          🙋‍♀️
+        </div>
+      );
+    }
+
+    function Chip({ children, onClick, disabled }) {
+      return (
+        <button
+          type="button"
+          onClick={onClick}
+          disabled={disabled}
+          className="px-4 py-2 rounded-full text-sm font-medium
+            bg-white/5 border border-white/10 text-zinc-300
+            hover:bg-violet-500/15 hover:border-violet-400/40 hover:text-white
+            hover:-translate-y-0.5 active:translate-y-0
+            transition-all duration-200 disabled:opacity-40 disabled:cursor-not-allowed
+            disabled:hover:translate-y-0">
+          {children}
+        </button>
+      );
+    }
+
+    function TypingIndicator() {
+      return (
+        <div className="flex items-center gap-1.5 px-1 py-1">
+          {[0, 1, 2].map(i => (
+            <span
+              key={i}
+              className="typing-dot w-2 h-2 rounded-full bg-violet-400"
+              style={{ animationDelay: `${i * 0.16}s` }}
+            />
+          ))}
+        </div>
+      );
+    }
+
+    // ========================================
+    // 🧩 Chat Bubble Components
+    // ========================================
+
+    function QuestionBubble({ text }) {
+      return (
+        <div className="flex justify-end animate-fadeInUp">
+          <div className="max-w-[80%] px-4 py-3 rounded-2xl rounded-br-md
+            bg-violet-600 text-white text-[15px] leading-relaxed shadow-md shadow-violet-900/30">
+            {text}
+          </div>
+        </div>
+      );
+    }
+
+    function AnswerBubble({ children, loading }) {
+      return (
+        <div className="flex justify-start gap-3 animate-fadeInUp">
+          <Avatar size="sm" className="mt-0.5 shrink-0" />
+          <div className="max-w-[80%] px-4 py-3 rounded-2xl rounded-bl-md
+            bg-[#1c1c22] border border-white/5 text-zinc-200 text-[15px] shadow-md shadow-black/30">
+            {loading ? <TypingIndicator /> : children}
+          </div>
+        </div>
+      );
+    }
+
+    function ErrorBubble({ text }) {
+      return (
+        <div className="flex justify-start gap-3 animate-fadeInUp">
+          <Avatar size="sm" className="mt-0.5 shrink-0" />
+          <div className="max-w-[80%] px-4 py-3 rounded-2xl rounded-bl-md
+            bg-red-950/40 border border-red-500/30 text-red-300 text-[15px]">
+            {text}
+          </div>
+        </div>
+      );
+    }
+
+    // ========================================
+    // 📄 App Component
+    // ========================================
+    const SUGGESTIONS = ['무슨 일 해?', '어떤 툴 써?', '요즘 뭐 배워?', '취미가 뭐야?'];
+
+    function App() {
+      const [input, setInput] = useState('');
+      const [messages, setMessages] = useState([]); // { role: 'q'|'a'|'error', text }
+      const [loading, setLoading] = useState(false);
+      const scrollRef = useRef(null);
+      const inputRef = useRef(null);
+
+      // 새 메시지 추가 시 자동 스크롤
+      useEffect(() => {
+        if (scrollRef.current) {
+          scrollRef.current.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' });
+        }
+      }, [messages, loading]);
+
+      const ask = useCallback(async (question) => {
+        const q = question.trim();
+        if (!q || loading) return;
+
+        setMessages(prev => [...prev, { role: 'q', text: q }]);
+        setInput('');
+        setLoading(true);
+
+        try {
+          const res = await fetch(`${API_BASE_URL}/ask`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ question: q }),
+          });
+          if (!res.ok) throw new Error(`서버 오류 (${res.status})`);
+          const data = await res.json();
+          setMessages(prev => [...prev, { role: 'a', text: data.answer ?? '답변을 받지 못했어요.' }]);
+        } catch (err) {
+          setMessages(prev => [...prev, {
+            role: 'error',
+            text: `답변을 가져오지 못했어요. ${err.message || ''} 서버가 실행 중인지 확인해 주세요.`,
+          }]);
+        } finally {
+          setLoading(false);
+          inputRef.current && inputRef.current.focus();
+        }
+      }, [loading]);
+
+      const handleSubmit = (e) => {
+        e.preventDefault();
+        ask(input);
+      };
+
+      const hasChat = messages.length > 0;
+
+      return (
+        <div className="glow min-h-screen text-white flex flex-col items-center px-4 py-8 sm:py-12">
+          <div className="w-full max-w-2xl flex flex-col flex-1">
+
+            {/* ===== 상단 히어로 ===== */}
+            <header className="flex flex-col items-center text-center mb-8">
+              <Avatar size="lg" className="mb-5" />
+              <h1 className="text-4xl sm:text-5xl font-extrabold tracking-tight">Amy</h1>
+              <p className="mt-2 text-violet-300 font-medium">
+                Product Designer <span className="text-zinc-500">@</span> NEW ID
+              </p>
+              <p className="mt-3 text-zinc-400 text-sm max-w-md leading-relaxed">
+                사람과 제품 사이의 경험을 디자인합니다. 궁금한 점을 물어보면 Amy를 대신해 답해드려요.
+              </p>
+            </header>
+
+            {/* ===== 채팅 영역 ===== */}
+            <main
+              ref={scrollRef}
+              className="flex-1 overflow-y-auto space-y-4 mb-5 min-h-[120px] max-h-[50vh] pr-1">
+              {!hasChat && !loading && (
+                <div className="h-full grid place-items-center text-center py-10">
+                  <div>
+                    <p className="text-lg font-semibold text-zinc-200">Amy에 대해 궁금한 게 있나요?</p>
+                    <p className="text-sm text-zinc-500 mt-1">아래에서 질문을 입력하거나 추천 질문을 눌러보세요.</p>
+                  </div>
+                </div>
+              )}
+
+              {messages.map((m, i) => {
+                if (m.role === 'q') return <QuestionBubble key={i} text={m.text} />;
+                if (m.role === 'error') return <ErrorBubble key={i} text={m.text} />;
+                return <AnswerBubble key={i}>{renderMarkdown(m.text)}</AnswerBubble>;
+              })}
+
+              {loading && <AnswerBubble loading />}
+            </main>
+
+            {/* ===== 추천 질문 칩 ===== */}
+            <div className="flex flex-wrap gap-2 justify-center mb-4">
+              {SUGGESTIONS.map(s => (
+                <Chip key={s} onClick={() => ask(s)} disabled={loading}>{s}</Chip>
+              ))}
+            </div>
+
+            {/* ===== 질문 입력 영역 ===== */}
+            <form onSubmit={handleSubmit} className="sticky bottom-0">
+              <div className="flex items-center gap-2 p-2 rounded-2xl
+                bg-[#141417] border border-white/10 shadow-xl shadow-black/40
+                focus-within:border-violet-400/50 transition-colors">
+                <input
+                  ref={inputRef}
+                  type="text"
+                  value={input}
+                  onChange={(e) => setInput(e.target.value)}
+                  placeholder="Amy에 대해 물어보세요…"
+                  aria-label="질문 입력"
+                  autoFocus
+                  className="flex-1 bg-transparent px-3 py-2 text-[15px] text-white
+                    placeholder:text-zinc-500 focus:outline-none"
+                />
+                <button
+                  type="submit"
+                  disabled={loading || !input.trim()}
+                  aria-label="질문 전송"
+                  className="shrink-0 px-5 py-2.5 rounded-xl font-semibold text-sm
+                    bg-violet-600 hover:bg-violet-500 active:scale-95
+                    disabled:bg-zinc-700 disabled:text-zinc-500 disabled:cursor-not-allowed
+                    transition-all duration-150">
+                  전송
+                </button>
+              </div>
+              <p className="text-center text-xs text-zinc-600 mt-3">
+                답변은 Amy의 <span className="text-zinc-500">about-me.md</span> 내용만 근거로 생성됩니다.
+              </p>
+            </form>
+          </div>
+        </div>
+      );
+    }
+
+    // ========================================
+    // 🚀 Render
+    // ========================================
+    ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+  </script>
+</body>
+</html>
