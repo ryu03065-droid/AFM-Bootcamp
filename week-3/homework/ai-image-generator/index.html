@@ -1,0 +1,449 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AI 이미지 생성기</title>
+  <script src="https://cdn.tailwindcss.com/3.4.16"></script>
+  <!-- ⚠️ 모든 CDN 버전 고정. Babel 은 반드시 7.x (8.x 미지원) -->
+  <script src="https://unpkg.com/react@18.3.1/umd/react.development.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone@7.25.9/babel.min.js"></script>
+  <style>
+    @keyframes shimmer {
+      0% { background-position: -1000px 0; }
+      100% { background-position: 1000px 0; }
+    }
+    .skeleton-shimmer {
+      background: linear-gradient(90deg, #1e293b 25%, #334155 50%, #1e293b 75%);
+      background-size: 1000px 100%;
+      animation: shimmer 1.8s infinite linear;
+    }
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(8px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .fade-in { animation: fadeIn 0.4s ease-out; }
+    /* 스크롤바 */
+    ::-webkit-scrollbar { width: 8px; }
+    ::-webkit-scrollbar-track { background: #0f172a; }
+    ::-webkit-scrollbar-thumb { background: #334155; border-radius: 4px; }
+  </style>
+</head>
+<body class="bg-slate-950 text-slate-100">
+  <div id="root"></div>
+
+  <script type="text/babel">
+    // ========================================
+    // React Hooks
+    // ========================================
+    const { useState, useEffect, useMemo, useCallback, useRef } = React;
+
+    // ========================================
+    // 상수 / 설정
+    // ========================================
+    const API_ENDPOINT = "/api/generate";
+
+    // 스타일 프리셋 — 각 스타일은 프롬프트에 자동으로 덧붙는 suffix 를 가진다
+    const STYLE_PRESETS = [
+      {
+        id: "ghibli",
+        name: "지브리풍",
+        emoji: "🌿",
+        gradient: "from-emerald-500/20 to-teal-500/20",
+        ring: "ring-emerald-400",
+        suffix: "Studio Ghibli animation style, soft warm colors, whimsical and magical atmosphere, hand-drawn look, Hayao Miyazaki inspired"
+      },
+      {
+        id: "cyberpunk",
+        name: "사이버펑크",
+        emoji: "🤖",
+        gradient: "from-fuchsia-500/20 to-cyan-500/20",
+        ring: "ring-fuchsia-400",
+        suffix: "cyberpunk aesthetic, neon lights, dark dystopian cityscape, rain-soaked streets, holographic displays, blade runner atmosphere"
+      },
+      {
+        id: "oil",
+        name: "유화",
+        emoji: "🎨",
+        gradient: "from-amber-500/20 to-orange-500/20",
+        ring: "ring-amber-400",
+        suffix: "oil painting style, rich textured brushstrokes, classical masterpiece, dramatic lighting, museum quality fine art"
+      },
+      {
+        id: "watercolor",
+        name: "수채화",
+        emoji: "💧",
+        gradient: "from-sky-500/20 to-blue-500/20",
+        ring: "ring-sky-400",
+        suffix: "delicate watercolor painting, soft washes of color, paper texture, flowing transparent layers, dreamy and gentle mood"
+      },
+      {
+        id: "pixel",
+        name: "픽셀아트",
+        emoji: "👾",
+        gradient: "from-violet-500/20 to-purple-500/20",
+        ring: "ring-violet-400",
+        suffix: "pixel art style, 16-bit retro game aesthetic, limited color palette, crisp pixel edges, nostalgic video game look"
+      },
+      {
+        id: "photo",
+        name: "포토리얼",
+        emoji: "📷",
+        gradient: "from-slate-400/20 to-slate-600/20",
+        ring: "ring-slate-300",
+        suffix: "hyperrealistic photography, 8K ultra detailed, professional DSLR, perfect lighting, photorealistic rendering"
+      },
+    ];
+
+    // ========================================
+    // 🎨 Design System Components
+    // ========================================
+    function Button({ variant = "primary", size = "md", disabled, onClick, className = "", children, type = "button" }) {
+      const base = "inline-flex items-center justify-center gap-2 font-semibold rounded-xl transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-slate-950 disabled:opacity-50 disabled:cursor-not-allowed";
+      const variants = {
+        primary: "bg-gradient-to-r from-indigo-500 to-fuchsia-500 hover:from-indigo-400 hover:to-fuchsia-400 text-white shadow-lg shadow-fuchsia-500/20 focus:ring-fuchsia-400",
+        secondary: "bg-slate-800 hover:bg-slate-700 text-slate-100 focus:ring-slate-500",
+        ghost: "bg-transparent hover:bg-slate-800 text-slate-300 focus:ring-slate-600",
+        danger: "bg-red-600 hover:bg-red-500 text-white focus:ring-red-400",
+      };
+      const sizes = { sm: "px-3 py-1.5 text-sm", md: "px-5 py-2.5 text-sm", lg: "px-7 py-3.5 text-base" };
+      return (
+        <button type={type} disabled={disabled} onClick={onClick}
+          className={`${base} ${variants[variant]} ${sizes[size]} ${className}`}>
+          {children}
+        </button>
+      );
+    }
+
+    function Card({ className = "", children }) {
+      return (
+        <div className={`bg-slate-900/60 border border-slate-800 rounded-2xl shadow-xl backdrop-blur ${className}`}>
+          {children}
+        </div>
+      );
+    }
+
+    function Badge({ className = "", children }) {
+      return (
+        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${className}`}>
+          {children}
+        </span>
+      );
+    }
+
+    function Spinner({ className = "h-5 w-5" }) {
+      return (
+        <svg className={`animate-spin ${className}`} viewBox="0 0 24 24" fill="none">
+          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+          <path className="opacity-90" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.4 0 0 5.4 0 12h4z" />
+        </svg>
+      );
+    }
+
+    // ========================================
+    // 🧩 스타일 프리셋 카드
+    // ========================================
+    function StyleCard({ preset, selected, onSelect }) {
+      return (
+        <button
+          onClick={() => onSelect(preset.id)}
+          aria-pressed={selected}
+          className={`group relative flex flex-col items-center justify-center gap-2 p-4 rounded-2xl border text-center
+            bg-gradient-to-br ${preset.gradient}
+            transition-all duration-200 hover:scale-[1.03]
+            ${selected
+              ? `border-transparent ring-2 ${preset.ring} shadow-lg`
+              : "border-slate-800 hover:border-slate-600"}`}
+        >
+          <span className="text-3xl sm:text-4xl select-none">{preset.emoji}</span>
+          <span className="text-sm font-semibold text-slate-100">{preset.name}</span>
+          {selected && (
+            <span className="absolute top-2 right-2 text-white bg-fuchsia-500 rounded-full p-1 text-[10px] leading-none">✓</span>
+          )}
+        </button>
+      );
+    }
+
+    // ========================================
+    // 🧩 API 키 설정 영역
+    // ========================================
+    function ApiKeySettings({ apiKey, onSave }) {
+      const [open, setOpen] = useState(!apiKey);
+      const [draft, setDraft] = useState(apiKey || "");
+      const [show, setShow] = useState(false);
+
+      useEffect(() => { setDraft(apiKey || ""); }, [apiKey]);
+
+      const masked = apiKey ? `${apiKey.slice(0, 8)}••••••••${apiKey.slice(-4)}` : "미설정";
+
+      return (
+        <Card className="p-4 sm:p-5">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2 min-w-0">
+              <span className="text-xl">🔑</span>
+              <div className="min-w-0">
+                <p className="text-sm font-semibold text-slate-100">fal.ai API Key</p>
+                <p className="text-xs text-slate-400 truncate">
+                  {apiKey ? <span className="font-mono">{masked}</span> : "이미지 생성을 위해 키를 입력하세요"}
+                </p>
+              </div>
+            </div>
+            <Button variant="ghost" size="sm" onClick={() => setOpen(o => !o)}>
+              {open ? "닫기" : "설정"}
+            </Button>
+          </div>
+
+          {open && (
+            <div className="mt-4 space-y-3 fade-in">
+              <div className="relative">
+                <input
+                  type={show ? "text" : "password"}
+                  value={draft}
+                  onChange={(e) => setDraft(e.target.value)}
+                  placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx:xxxx..."
+                  className="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-2.5 pr-20 text-sm font-mono
+                    text-slate-100 placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                />
+                <button
+                  onClick={() => setShow(s => !s)}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-slate-400 hover:text-slate-200 px-2 py-1"
+                >
+                  {show ? "숨기기" : "표시"}
+                </button>
+              </div>
+              <p className="text-xs text-slate-500">
+                fal.ai API Key 는{" "}
+                <a href="https://fal.ai" target="_blank" rel="noopener noreferrer"
+                  className="text-indigo-400 hover:text-indigo-300 underline">
+                  fal.ai
+                </a>{" "}
+                에서 무료로 발급받을 수 있어요 (신용카드 불필요).
+              </p>
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-xs text-slate-500">키는 브라우저(localStorage)에만 저장됩니다.</p>
+                <Button size="sm" onClick={() => { onSave(draft.trim()); setOpen(false); }} disabled={!draft.trim()}>
+                  저장
+                </Button>
+              </div>
+            </div>
+          )}
+        </Card>
+      );
+    }
+
+    // ========================================
+    // 🧩 결과 표시 영역
+    // ========================================
+    function ResultDisplay({ loading, imageUrl, error, onDownload }) {
+      if (loading) {
+        return (
+          <Card className="p-4">
+            <div className="aspect-square w-full rounded-xl skeleton-shimmer flex items-center justify-center">
+              <div className="flex flex-col items-center gap-3 text-slate-400">
+                <Spinner className="h-8 w-8 text-fuchsia-400" />
+                <p className="text-sm">이미지를 생성하고 있어요...</p>
+              </div>
+            </div>
+          </Card>
+        );
+      }
+
+      if (error) {
+        return (
+          <Card className="p-6 border-red-500/40">
+            <div className="flex flex-col items-center text-center gap-3 py-8">
+              <span className="text-4xl">😢</span>
+              <p className="text-sm font-semibold text-red-300">생성에 실패했어요</p>
+              <p className="text-xs text-slate-400 max-w-sm whitespace-pre-wrap">{error}</p>
+            </div>
+          </Card>
+        );
+      }
+
+      if (imageUrl) {
+        return (
+          <Card className="p-4 fade-in">
+            <div className="relative group">
+              <img src={imageUrl} alt="생성된 이미지" className="w-full rounded-xl shadow-2xl" />
+            </div>
+            <div className="mt-4 flex justify-end">
+              <Button onClick={onDownload}>
+                ⬇️ 다운로드
+              </Button>
+            </div>
+          </Card>
+        );
+      }
+
+      // empty state
+      return (
+        <Card className="p-6">
+          <div className="aspect-square w-full rounded-xl border-2 border-dashed border-slate-800 flex flex-col items-center justify-center gap-3 text-slate-600">
+            <span className="text-5xl">🖼️</span>
+            <p className="text-sm">생성된 이미지가 여기에 표시됩니다</p>
+          </div>
+        </Card>
+      );
+    }
+
+    // ========================================
+    // 🚀 App
+    // ========================================
+    function App() {
+      const [selectedStyle, setSelectedStyle] = useState(STYLE_PRESETS[0].id);
+      const [prompt, setPrompt] = useState("");
+      const [loading, setLoading] = useState(false);
+      const [imageUrl, setImageUrl] = useState("");
+      const [error, setError] = useState("");
+
+      const stylePreset = useMemo(
+        () => STYLE_PRESETS.find(s => s.id === selectedStyle),
+        [selectedStyle]
+      );
+
+      const combinedPrompt = useMemo(() => {
+        const base = prompt.trim();
+        if (!base) return "";
+        return `${base}, ${stylePreset.suffix}`;
+      }, [prompt, stylePreset]);
+
+      const handleGenerate = useCallback(async () => {
+        setError("");
+        if (!prompt.trim()) { setError("생성할 이미지에 대한 설명을 입력해 주세요."); return; }
+
+        setLoading(true);
+        setImageUrl("");
+
+        try {
+          const res = await fetch(API_ENDPOINT, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ prompt: combinedPrompt }),
+          });
+          const data = await res.json();
+          if (!res.ok) throw new Error(data.error || `요청 실패 (HTTP ${res.status})`);
+          const url = data?.images?.[0]?.url;
+          if (!url) throw new Error("응답에서 이미지 URL을 찾을 수 없습니다.");
+          setImageUrl(url);
+        } catch (err) {
+          setError(err.message || "알 수 없는 오류가 발생했습니다.");
+        } finally {
+          setLoading(false);
+        }
+      }, [prompt, combinedPrompt]);
+
+      const handleDownload = useCallback(async () => {
+        if (!imageUrl) return;
+        try {
+          const res = await fetch(imageUrl);
+          const blob = await res.blob();
+          const objectUrl = URL.createObjectURL(blob);
+          const a = document.createElement("a");
+          a.href = objectUrl;
+          a.download = `ai-image-${Date.now()}.png`;
+          document.body.appendChild(a);
+          a.click();
+          a.remove();
+          URL.revokeObjectURL(objectUrl);
+        } catch (_) {
+          // 다운로드 실패 시 새 탭으로 열기
+          window.open(imageUrl, "_blank");
+        }
+      }, [imageUrl]);
+
+      const onKeyDown = (e) => {
+        if ((e.metaKey || e.ctrlKey) && e.key === "Enter") handleGenerate();
+      };
+
+      return (
+        <div className="min-h-screen">
+          {/* 배경 장식 */}
+          <div className="fixed inset-0 -z-10 overflow-hidden pointer-events-none">
+            <div className="absolute -top-40 -left-40 w-96 h-96 bg-indigo-600/20 rounded-full blur-3xl" />
+            <div className="absolute -bottom-40 -right-40 w-96 h-96 bg-fuchsia-600/20 rounded-full blur-3xl" />
+          </div>
+
+          <header className="max-w-5xl mx-auto px-4 pt-10 pb-6 text-center">
+            <h1 className="text-3xl sm:text-4xl font-extrabold tracking-tight">
+              <span className="bg-gradient-to-r from-indigo-400 via-fuchsia-400 to-pink-400 bg-clip-text text-transparent">
+                ✨ AI 이미지 생성기
+              </span>
+            </h1>
+            <p className="mt-3 text-sm text-slate-400">스타일을 고르고, 원하는 장면을 설명하면 fal.ai FLUX 가 그려드려요</p>
+          </header>
+
+          <main className="max-w-5xl mx-auto px-4 pb-16 grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* 왼쪽: 입력 */}
+            <div className="space-y-6">
+              {/* 스타일 프리셋 */}
+              <Card className="p-5">
+                <div className="flex items-center gap-2 mb-4">
+                  <h2 className="text-sm font-semibold text-slate-200">1. 스타일 선택</h2>
+                  <Badge className="bg-slate-800 text-slate-400">{stylePreset.name}</Badge>
+                </div>
+                <div className="grid grid-cols-3 gap-3">
+                  {STYLE_PRESETS.map(p => (
+                    <StyleCard key={p.id} preset={p} selected={p.id === selectedStyle} onSelect={setSelectedStyle} />
+                  ))}
+                </div>
+              </Card>
+
+              {/* 프롬프트 */}
+              <Card className="p-5">
+                <h2 className="text-sm font-semibold text-slate-200 mb-3">2. 프롬프트 입력</h2>
+                <textarea
+                  value={prompt}
+                  onChange={(e) => setPrompt(e.target.value)}
+                  onKeyDown={onKeyDown}
+                  rows={4}
+                  placeholder="예: 노을 지는 바닷가에서 풍선을 든 소녀"
+                  className="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-3 text-sm
+                    text-slate-100 placeholder-slate-600 resize-none focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                />
+
+                {/* 최종 전송 프롬프트 미리보기 */}
+                <div className="mt-3">
+                  <p className="text-xs font-medium text-slate-400 mb-1">전송될 최종 프롬프트</p>
+                  <div className="bg-slate-950/80 border border-slate-800 rounded-xl px-3 py-2.5 text-xs text-slate-300 min-h-[3rem] font-mono leading-relaxed">
+                    {combinedPrompt
+                      ? (<><span className="text-slate-100">{prompt.trim()}</span><span className="text-fuchsia-400/80">, {stylePreset.suffix}</span></>)
+                      : <span className="text-slate-600">프롬프트를 입력하면 여기에 미리보기가 표시됩니다</span>}
+                  </div>
+                </div>
+
+                <div className="mt-4 flex items-center justify-between gap-3">
+                  <span className="text-xs text-slate-500 hidden sm:inline">Ctrl/⌘ + Enter 로 생성</span>
+                  <Button size="lg" onClick={handleGenerate} disabled={loading} className="ml-auto">
+                    {loading ? (<><Spinner /> 생성 중...</>) : (<>🎨 이미지 생성</>)}
+                  </Button>
+                </div>
+              </Card>
+            </div>
+
+            {/* 오른쪽: 결과 */}
+            <div className="lg:sticky lg:top-6 self-start space-y-3">
+              <h2 className="text-sm font-semibold text-slate-200 px-1">결과</h2>
+              <ResultDisplay
+                loading={loading}
+                imageUrl={imageUrl}
+                error={error}
+                onDownload={handleDownload}
+              />
+            </div>
+          </main>
+
+          <footer className="text-center text-xs text-slate-600 pb-8">
+            fal.ai FLUX schnell · API 키는 브라우저에만 저장됩니다
+          </footer>
+        </div>
+      );
+    }
+
+    // ========================================
+    // Render
+    // ========================================
+    ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+  </script>
+</body>
+</html>

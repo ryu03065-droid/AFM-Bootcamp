@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>실시간 코인 대시보드</title>
+  <script src="https://cdn.tailwindcss.com/3.4.16"></script>
+  <script src="https://unpkg.com/react@18.3.1/umd/react.development.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone@7.25.9/babel.min.js"></script>
+  <style>
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .spinner { animation: spin 0.8s linear infinite; }
+    body { background-color: #0b1120; }
+  </style>
+</head>
+<body class="text-slate-100">
+  <div id="root"></div>
+  <script type="text/babel">
+    const { useState, useEffect, useRef, useCallback } = React;
+
+    const DEFAULT_IDS = ['bitcoin','ethereum','solana','ripple','dogecoin','cardano','binancecoin','polkadot'];
+    const REFRESH_SECONDS = 30;
+
+    // ── 유틸 ──────────────────────────────────────────────
+    function formatPrice(v) {
+      if (v == null) return '-';
+      const d = v >= 1 ? 2 : 6;
+      return '$' + v.toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d });
+    }
+    function formatTime(d) { return d.toLocaleTimeString('ko-KR', { hour12: false }); }
+    function changeStyle(c) {
+      if (c > 0) return { text: 'text-emerald-400', accent: 'border-emerald-500/60', bg: 'bg-emerald-500/10', arrow: '▲' };
+      if (c < 0) return { text: 'text-rose-400',    accent: 'border-rose-500/60',    bg: 'bg-rose-500/10',    arrow: '▼' };
+      return        { text: 'text-slate-400',        accent: 'border-slate-600/60',  bg: 'bg-slate-700/20',   arrow: '■' };
+    }
+
+    // ── 공용 컴포넌트 ──────────────────────────────────────
+    function Spinner({ size = 'md' }) {
+      const dim = size === 'lg' ? 'h-10 w-10' : 'h-4 w-4';
+      return <div className={`spinner ${dim} rounded-full border-2 border-slate-600 border-t-sky-400`} />;
+    }
+
+    // ── 코인 카드 ──────────────────────────────────────────
+    function CoinCard({ coin, onRemove }) {
+      const change = coin.price_change_percentage_24h ?? 0;
+      const s = changeStyle(change);
+      return (
+        <div className={`relative rounded-2xl bg-slate-800/60 border-l-4 ${s.accent} p-5 shadow-lg shadow-black/30 ring-1 ring-white/5 transition hover:-translate-y-0.5 hover:shadow-xl`}>
+          <button
+            onClick={() => onRemove(coin.id)}
+            className="absolute right-3 top-3 flex h-6 w-6 items-center justify-center rounded-full text-slate-500 hover:bg-rose-500/20 hover:text-rose-400 transition"
+            title="삭제"
+          >✕</button>
+          <div className="flex items-center gap-3 pr-6">
+            <img src={coin.image} alt={coin.name} className="h-10 w-10 rounded-full bg-white/5" />
+            <div className="min-w-0">
+              <p className="truncate font-semibold text-slate-100">{coin.name}</p>
+              <p className="text-xs uppercase tracking-wide text-slate-400">{coin.symbol}</p>
+            </div>
+          </div>
+          <div className="mt-4">
+            <p className="text-2xl font-bold tabular-nums text-slate-50">{formatPrice(coin.current_price)}</p>
+            <p className={`mt-1 text-sm font-semibold tabular-nums ${s.text}`}>
+              {s.arrow} {Math.abs(change).toFixed(2)}%
+              <span className="ml-1 text-xs font-normal text-slate-500">24h</span>
+            </p>
+          </div>
+        </div>
+      );
+    }
+
+    // ── 코인 검색 추가 패널 ────────────────────────────────
+    function AddCoinPanel({ existingIds, onAdd }) {
+      const [query, setQuery]       = useState('');
+      const [results, setResults]   = useState([]);
+      const [searching, setSearching] = useState(false);
+      const [addError, setAddError] = useState('');
+      const debounceRef = useRef(null);
+      const panelRef    = useRef(null);
+
+      // 외부 클릭 시 드롭다운 닫기
+      useEffect(() => {
+        function handleClick(e) {
+          if (panelRef.current && !panelRef.current.contains(e.target)) setResults([]);
+        }
+        document.addEventListener('mousedown', handleClick);
+        return () => document.removeEventListener('mousedown', handleClick);
+      }, []);
+
+      function handleChange(e) {
+        const v = e.target.value;
+        setQuery(v);
+        setAddError('');
+        clearTimeout(debounceRef.current);
+        if (!v.trim()) { setResults([]); return; }
+        debounceRef.current = setTimeout(async () => {
+          setSearching(true);
+          try {
+            const res = await fetch(`https://api.coingecko.com/api/v3/search?query=${encodeURIComponent(v)}`);
+            const json = await res.json();
+            setResults((json.coins || []).slice(0, 6));
+          } catch {
+            setResults([]);
+          } finally {
+            setSearching(false);
+          }
+        }, 400);
+      }
+
+      function handleSelect(coin) {
+        if (existingIds.includes(coin.id)) {
+          setAddError(`${coin.name}은(는) 이미 추가된 코인입니다.`);
+          setResults([]);
+          setQuery('');
+          return;
+        }
+        onAdd(coin.id);
+        setQuery('');
+        setResults([]);
+        setAddError('');
+      }
+
+      return (
+        <div ref={panelRef} className="relative w-full sm:w-72">
+          <div className="flex gap-2">
+            <div className="relative flex-1">
+              <input
+                type="text"
+                value={query}
+                onChange={handleChange}
+                placeholder="코인 이름 또는 심볼 검색..."
+                className="w-full rounded-lg bg-slate-800/80 px-3 py-2 text-sm text-slate-100 placeholder-slate-500 ring-1 ring-white/10 focus:outline-none focus:ring-sky-500"
+              />
+              {searching && (
+                <span className="absolute right-3 top-1/2 -translate-y-1/2"><Spinner /></span>
+              )}
+            </div>
+          </div>
+          {addError && <p className="mt-1 text-xs text-rose-400">{addError}</p>}
+          {results.length > 0 && (
+            <ul className="absolute z-50 mt-1 w-full rounded-xl bg-slate-800 shadow-xl ring-1 ring-white/10 overflow-hidden">
+              {results.map(c => (
+                <li key={c.id}>
+                  <button
+                    onClick={() => handleSelect(c)}
+                    className="flex w-full items-center gap-3 px-3 py-2 text-left text-sm hover:bg-slate-700 transition"
+                  >
+                    {c.thumb
+                      ? <img src={c.thumb} alt={c.name} className="h-6 w-6 rounded-full" />
+                      : <span className="h-6 w-6 rounded-full bg-slate-600 flex items-center justify-center text-xs">?</span>
+                    }
+                    <span className="flex-1 truncate text-slate-100">{c.name}</span>
+                    <span className="text-xs uppercase text-slate-400">{c.symbol}</span>
+                    {existingIds.includes(c.id) && <span className="text-xs text-slate-500">추가됨</span>}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      );
+    }
+
+    // ── App ───────────────────────────────────────────────
+    function App() {
+      const [coinIds,     setCoinIds]     = useState(DEFAULT_IDS);
+      const [coins,       setCoins]       = useState([]);
+      const [loading,     setLoading]     = useState(true);
+      const [error,       setError]       = useState(null);
+      const [lastUpdated, setLastUpdated] = useState(null);
+      const [countdown,   setCountdown]   = useState(REFRESH_SECONDS);
+
+      const fetchCoins = useCallback(async (ids) => {
+        if (!ids || ids.length === 0) { setCoins([]); setLoading(false); return; }
+        setLoading(true);
+        setError(null);
+        try {
+          const url = `https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&ids=${ids.join(',')}&order=market_cap_desc&per_page=50&page=1&sparkline=false&price_change_percentage=24h`;
+          const res = await fetch(url);
+          if (!res.ok) throw new Error('HTTP ' + res.status);
+          const data = await res.json();
+          // ids 순서 유지
+          const map = Object.fromEntries(data.map(c => [c.id, c]));
+          setCoins(ids.map(id => map[id]).filter(Boolean));
+          setLastUpdated(new Date());
+        } catch {
+          setError('데이터를 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.');
+        } finally {
+          setLoading(false);
+          setCountdown(REFRESH_SECONDS);
+        }
+      }, []);
+
+      // coinIds 변경 시 즉시 fetch
+      useEffect(() => { fetchCoins(coinIds); }, [coinIds, fetchCoins]);
+
+      // 30초 자동 갱신 카운트다운
+      useEffect(() => {
+        const id = setInterval(() => {
+          setCountdown(prev => {
+            if (prev <= 1) {
+              fetchCoins(coinIds);
+              return REFRESH_SECONDS;
+            }
+            return prev - 1;
+          });
+        }, 1000);
+        return () => clearInterval(id);
+      }, [coinIds, fetchCoins]);
+
+      function handleAdd(id) {
+        setCoinIds(prev => [...prev, id]);
+      }
+      function handleRemove(id) {
+        setCoinIds(prev => prev.filter(x => x !== id));
+      }
+
+      return (
+        <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6">
+          {/* 헤더 */}
+          <header className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <h1 className="text-2xl font-bold text-slate-50 sm:text-3xl">🪙 실시간 코인 대시보드</h1>
+              <p className="mt-1 text-sm text-slate-400">
+                {lastUpdated ? `마지막 업데이트: ${formatTime(lastUpdated)}` : '데이터 로딩 중...'}
+              </p>
+            </div>
+            <div className="flex flex-col items-end gap-3">
+              <div className="flex items-center gap-3">
+                <span className="rounded-lg bg-slate-800/60 px-3 py-2 text-sm text-slate-300 ring-1 ring-white/5">
+                  다음 갱신: <span className="font-semibold tabular-nums text-sky-400">{countdown}초</span>
+                </span>
+                <button
+                  onClick={() => fetchCoins(coinIds)}
+                  disabled={loading}
+                  className="inline-flex items-center gap-2 rounded-lg bg-sky-500 px-4 py-2 text-sm font-semibold text-white hover:bg-sky-400 disabled:opacity-50 transition"
+                >
+                  {loading ? <Spinner /> : <span>↻</span>}
+                  새로고침
+                </button>
+              </div>
+              <AddCoinPanel existingIds={coinIds} onAdd={handleAdd} />
+            </div>
+          </header>
+
+          {/* 본문 */}
+          <main className="mt-8">
+            {error && (
+              <div className="rounded-2xl border border-rose-500/40 bg-rose-500/10 p-6 text-center">
+                <p className="text-rose-300">{error}</p>
+                <button onClick={() => fetchCoins(coinIds)} className="mt-4 rounded-lg bg-sky-500 px-4 py-2 text-sm font-semibold text-white hover:bg-sky-400">
+                  다시 시도
+                </button>
+              </div>
+            )}
+            {!error && loading && coins.length === 0 && (
+              <div className="flex flex-col items-center justify-center gap-4 py-24">
+                <Spinner size="lg" />
+                <p className="text-slate-400">코인 데이터를 불러오는 중...</p>
+              </div>
+            )}
+            {coinIds.length === 0 && (
+              <div className="py-24 text-center text-slate-500">
+                위 검색창에서 코인을 추가해 보세요.
+              </div>
+            )}
+            {!error && coins.length > 0 && (
+              <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+                {coins.map(coin => (
+                  <CoinCard key={coin.id} coin={coin} onRemove={handleRemove} />
+                ))}
+              </div>
+            )}
+          </main>
+
+          <footer className="mt-10 text-center text-xs text-slate-600">
+            데이터 제공: CoinGecko · {REFRESH_SECONDS}초마다 자동 갱신
+          </footer>
+        </div>
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+  </script>
+</body>
+</html>

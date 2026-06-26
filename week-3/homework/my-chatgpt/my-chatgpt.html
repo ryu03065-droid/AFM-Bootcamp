@@ -1,0 +1,420 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>My ChatGPT - 나만의 AI 챗봇</title>
+  <script src="https://cdn.tailwindcss.com/3.4.16"></script>
+  <!-- ⚠️ 모든 CDN은 버전을 명시적으로 고정한다. 미고정 시 @babel/standalone 이
+       최신(8.x)으로 올라가 type="text/babel" 인라인 변환이 통째로 깨진다.
+       Babel 은 반드시 7.x 로 고정한다 (8.x 미지원). -->
+  <script src="https://unpkg.com/react@18.3.1/umd/react.development.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone@7.25.9/babel.min.js"></script>
+  <style>
+    /* Tailwind 으로 표현하기 어려운 부분만 커스텀 */
+    /* 타이핑 인디케이터 점 애니메이션 */
+    @keyframes typingBounce {
+      0%, 60%, 100% { transform: translateY(0); opacity: 0.4; }
+      30% { transform: translateY(-4px); opacity: 1; }
+    }
+    .typing-dot { animation: typingBounce 1.2s infinite ease-in-out; }
+    .typing-dot:nth-child(2) { animation-delay: 0.2s; }
+    .typing-dot:nth-child(3) { animation-delay: 0.4s; }
+
+    /* 메시지 등장 페이드인 */
+    @keyframes fadeInUp {
+      from { opacity: 0; transform: translateY(8px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .msg-enter { animation: fadeInUp 0.25s ease-out; }
+
+    /* 라이트 테마 스크롤바 */
+    .custom-scroll::-webkit-scrollbar { width: 8px; }
+    .custom-scroll::-webkit-scrollbar-track { background: transparent; }
+    .custom-scroll::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+    .custom-scroll::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="text/babel">
+    // ========================================
+    // React Hooks Destructuring
+    // ========================================
+    const { useState, useRef, useEffect, useCallback } = React;
+
+    // API 베이스: 상대경로 사용 (하드코딩된 localhost 금지)
+    const API_BASE_URL = '/api';
+
+    // ========================================
+    // 상수 / 헬퍼
+    // ========================================
+    const TONE_OPTIONS = [
+      { value: 'friendly',  label: '친근하게' },
+      { value: 'formal',    label: '격식있게' },
+      { value: 'humorous',  label: '유머러스하게' },
+      { value: 'cool',      label: '쿨하게' },
+    ];
+
+    const TONE_LABEL = {
+      friendly: '친근하게',
+      formal: '격식있게',
+      humorous: '유머러스하게',
+      cool: '쿨하게',
+    };
+
+    function getInitial(name) {
+      const trimmed = (name || '').trim();
+      return trimmed ? trimmed.charAt(0).toUpperCase() : 'AI';
+    }
+
+    // Mock 응답 생성기 (API 실패 시 fallback)
+    function generateMockReply(userText, profile) {
+      const name = profile.name || 'AI';
+      const toneMap = {
+        friendly: '안녕하세요~ 😊',
+        formal: '말씀 감사합니다.',
+        humorous: 'ㅋㅋ 재밌는 질문이네요!',
+        cool: '...그렇지.',
+      };
+      const opener = toneMap[profile.tone] || '안녕하세요!';
+      return `${opener} 저는 ${name}입니다. "${userText}"에 대해 ${profile.expertise || '다양한 분야'}의 관점으로 답변드리겠습니다. (실제 API 연동 시 진짜 AI가 응답합니다!)`;
+    }
+
+    // ========================================
+    // 🎨 Design System Components
+    // ========================================
+    function Input({ label, value, onChange, placeholder, type = 'text', className = '' }) {
+      return (
+        <label className="block">
+          {label && <span className="block mb-1.5 text-xs font-medium text-gray-500">{label}</span>}
+          <input
+            type={type}
+            value={value}
+            onChange={onChange}
+            placeholder={placeholder}
+            className={`w-full px-3 py-2 rounded-lg bg-white border border-gray-200 text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-400 transition ${className}`}
+          />
+        </label>
+      );
+    }
+
+    function Textarea({ label, value, onChange, placeholder, rows = 3, className = '' }) {
+      return (
+        <label className="block">
+          {label && <span className="block mb-1.5 text-xs font-medium text-gray-500">{label}</span>}
+          <textarea
+            value={value}
+            onChange={onChange}
+            placeholder={placeholder}
+            rows={rows}
+            className={`w-full px-3 py-2 rounded-lg bg-white border border-gray-200 text-sm text-gray-900 placeholder-gray-400 resize-none focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-400 transition ${className}`}
+          />
+        </label>
+      );
+    }
+
+    function Select({ label, value, onChange, options, className = '' }) {
+      return (
+        <label className="block">
+          {label && <span className="block mb-1.5 text-xs font-medium text-gray-500">{label}</span>}
+          <select
+            value={value}
+            onChange={onChange}
+            className={`w-full px-3 py-2 rounded-lg bg-white border border-gray-200 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-400 transition ${className}`}
+          >
+            {options.map((opt) => (
+              <option key={opt.value} value={opt.value}>{opt.label}</option>
+            ))}
+          </select>
+        </label>
+      );
+    }
+
+    function Button({ children, onClick, variant = 'primary', type = 'button', disabled = false, className = '' }) {
+      const variants = {
+        primary: 'bg-blue-600 hover:bg-blue-500 text-white',
+        ghost: 'bg-gray-100 hover:bg-gray-200 text-gray-800',
+      };
+      return (
+        <button
+          type={type}
+          onClick={onClick}
+          disabled={disabled}
+          className={`inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-blue-500/60 ${variants[variant]} ${className}`}
+        >
+          {children}
+        </button>
+      );
+    }
+
+    function Avatar({ name, size = 'md' }) {
+      const sizes = { sm: 'w-8 h-8 text-xs', md: 'w-9 h-9 text-sm', lg: 'w-11 h-11 text-base' };
+      return (
+        <div className={`${sizes[size]} flex-shrink-0 rounded-full bg-gradient-to-br from-emerald-500 to-blue-600 flex items-center justify-center font-bold text-white shadow`}>
+          {getInitial(name)}
+        </div>
+      );
+    }
+
+    // ========================================
+    // 🧩 Sidebar - AI 프로필 설정 패널
+    // ========================================
+    function Sidebar({ draft, setDraft, onApply, applied }) {
+      const update = (key) => (e) => setDraft({ ...draft, [key]: e.target.value });
+
+      return (
+        <aside className="w-full md:w-80 md:flex-shrink-0 bg-gray-50 border-b md:border-b-0 md:border-r border-gray-200 flex flex-col">
+          <div className="px-5 py-4 border-b border-gray-200">
+            <h1 className="text-base font-bold text-gray-900 flex items-center gap-2">
+              <span className="text-lg">🤖</span> AI 프로필 설정
+            </h1>
+            <p className="mt-1 text-xs text-gray-500">AI의 성격과 말투를 자유롭게 설정하세요.</p>
+          </div>
+
+          <div className="flex-1 overflow-y-auto custom-scroll px-5 py-4 space-y-4">
+            <Input
+              label="AI 이름"
+              value={draft.name}
+              onChange={update('name')}
+              placeholder="예: 알파"
+            />
+            <Textarea
+              label="성격 설명"
+              value={draft.personality}
+              onChange={update('personality')}
+              placeholder="예: 친절하고 유머러스한 성격"
+            />
+            <Select
+              label="말투"
+              value={draft.tone}
+              onChange={update('tone')}
+              options={TONE_OPTIONS}
+            />
+            <Input
+              label="전문분야"
+              value={draft.expertise}
+              onChange={update('expertise')}
+              placeholder="예: 요리, 여행, 프로그래밍"
+            />
+          </div>
+
+          <div className="px-5 py-4 border-t border-gray-200">
+            <Button onClick={onApply} className="w-full">
+              ✨ 프로필 적용
+            </Button>
+            {applied && (
+              <p className="mt-3 text-xs text-emerald-600 text-center">프로필이 적용되었습니다!</p>
+            )}
+          </div>
+        </aside>
+      );
+    }
+
+    // ========================================
+    // 🧩 Chat - 헤더 / 메시지 / 입력창
+    // ========================================
+    function ChatHeader({ profile }) {
+      return (
+        <header className="flex-shrink-0 px-5 py-3 bg-white/90 backdrop-blur border-b border-gray-200 flex items-center gap-3">
+          <Avatar name={profile.name} size="lg" />
+          <div className="min-w-0">
+            <h2 className="text-base font-bold text-gray-900 truncate">
+              {profile.name || 'AI'}
+            </h2>
+            <p className="text-xs text-gray-500 truncate">
+              {profile.personality || '성격 미설정'} · {TONE_LABEL[profile.tone]} · {profile.expertise || '전문분야 미설정'}
+            </p>
+          </div>
+        </header>
+      );
+    }
+
+    function MessageBubble({ message, profile }) {
+      const isUser = message.role === 'user';
+      if (isUser) {
+        return (
+          <div className="msg-enter flex justify-end">
+            <div className="max-w-[75%] px-4 py-2.5 rounded-2xl rounded-tr-sm bg-blue-600 text-white text-sm leading-relaxed whitespace-pre-wrap break-words shadow">
+              {message.content}
+            </div>
+          </div>
+        );
+      }
+      return (
+        <div className="msg-enter flex items-start gap-3">
+          <Avatar name={profile.name} size="sm" />
+          <div className="max-w-[75%] px-4 py-2.5 rounded-2xl rounded-tl-sm bg-gray-100 text-gray-900 text-sm leading-relaxed whitespace-pre-wrap break-words shadow-sm">
+            {message.content}
+          </div>
+        </div>
+      );
+    }
+
+    function TypingIndicator({ profile }) {
+      return (
+        <div className="flex items-start gap-3">
+          <Avatar name={profile.name} size="sm" />
+          <div className="px-4 py-3 rounded-2xl rounded-tl-sm bg-gray-100 flex items-center gap-1.5">
+            <span className="typing-dot w-2 h-2 rounded-full bg-gray-400 inline-block"></span>
+            <span className="typing-dot w-2 h-2 rounded-full bg-gray-400 inline-block"></span>
+            <span className="typing-dot w-2 h-2 rounded-full bg-gray-400 inline-block"></span>
+          </div>
+        </div>
+      );
+    }
+
+    function ChatInput({ onSend, disabled }) {
+      const [text, setText] = useState('');
+
+      const submit = () => {
+        const trimmed = text.trim();
+        if (!trimmed || disabled) return;
+        onSend(trimmed);
+        setText('');
+      };
+
+      const handleKeyDown = (e) => {
+        // Enter 전송, Shift+Enter 줄바꿈
+        if (e.key === 'Enter' && !e.shiftKey) {
+          e.preventDefault();
+          submit();
+        }
+      };
+
+      return (
+        <div className="flex-shrink-0 px-4 py-3 bg-white border-t border-gray-200">
+          <div className="flex items-end gap-2 max-w-3xl mx-auto">
+            <textarea
+              value={text}
+              onChange={(e) => setText(e.target.value)}
+              onKeyDown={handleKeyDown}
+              rows={1}
+              placeholder="메시지를 입력하세요... (Enter 전송 / Shift+Enter 줄바꿈)"
+              className="flex-1 px-4 py-2.5 rounded-xl bg-gray-50 border border-gray-200 text-sm text-gray-900 placeholder-gray-400 resize-none max-h-32 custom-scroll focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-400 transition"
+            />
+            <Button onClick={submit} disabled={disabled || !text.trim()} className="h-[42px]">
+              전송
+            </Button>
+          </div>
+        </div>
+      );
+    }
+
+    function ChatArea({ profile, messages, loading, onSend }) {
+      const scrollRef = useRef(null);
+
+      // 새 메시지 / 로딩 상태 변화 시 맨 아래로 스크롤
+      useEffect(() => {
+        const el = scrollRef.current;
+        if (el) el.scrollTop = el.scrollHeight;
+      }, [messages, loading]);
+
+      return (
+        <section className="flex-1 flex flex-col min-w-0 bg-white">
+          <ChatHeader profile={profile} />
+          <div ref={scrollRef} className="flex-1 overflow-y-auto custom-scroll px-4 py-6">
+            <div className="max-w-3xl mx-auto space-y-4">
+              {messages.map((msg) => (
+                <MessageBubble key={msg.id} message={msg} profile={profile} />
+              ))}
+              {loading && <TypingIndicator profile={profile} />}
+            </div>
+          </div>
+          <ChatInput onSend={onSend} disabled={loading} />
+        </section>
+      );
+    }
+
+    // ========================================
+    // 🚀 App
+    // ========================================
+    function App() {
+      const initialProfile = {
+        name: '알파',
+        personality: '친절하고 지식이 풍부한',
+        tone: 'friendly',
+        expertise: '프로그래밍, 수학, 과학',
+      };
+
+      // 사이드바에서 편집 중인 초안
+      const [draft, setDraft] = useState(initialProfile);
+      // 실제 채팅에 적용된 프로필
+      const [profile, setProfile] = useState(initialProfile);
+      const [applied, setApplied] = useState(false);
+
+      const [messages, setMessages] = useState([
+        {
+          id: 'init',
+          role: 'assistant',
+          content: '안녕하세요! 저는 알파입니다. 무엇이든 물어보세요 😊',
+        },
+      ]);
+      const [loading, setLoading] = useState(false);
+
+      // 프로필 적용
+      const handleApply = useCallback(() => {
+        setProfile(draft);
+        setApplied(true);
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: `sys-${Date.now()}`,
+            role: 'assistant',
+            content: `프로필이 변경되었어요! 저는 이제 "${draft.name || 'AI'}"입니다. ${draft.personality || ''} 성격으로 ${TONE_LABEL[draft.tone]} 답변드릴게요. 😊`,
+          },
+        ]);
+        setTimeout(() => setApplied(false), 2500);
+      }, [draft]);
+
+      // AI 응답 요청: POST /api/chat → 실패 시 mock
+      const fetchReply = useCallback(async (history, currentProfile, userText) => {
+        try {
+          const res = await fetch(`${API_BASE_URL}/chat`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              messages: history.map(({ role, content }) => ({ role, content })),
+              profile: currentProfile,
+            }),
+          });
+          if (!res.ok) throw new Error('Bad response');
+          const data = await res.json();
+          if (!data || typeof data.reply !== 'string') throw new Error('Invalid payload');
+          return data.reply;
+        } catch (err) {
+          return generateMockReply(userText, currentProfile);
+        }
+      }, []);
+
+      const handleSend = useCallback(async (userText) => {
+        const userMsg = { id: `u-${Date.now()}`, role: 'user', content: userText };
+        const nextHistory = [...messages, userMsg];
+        setMessages(nextHistory);
+        setLoading(true);
+
+        const reply = await fetchReply(nextHistory, profile, userText);
+
+        setMessages((prev) => [
+          ...prev,
+          { id: `a-${Date.now()}`, role: 'assistant', content: reply },
+        ]);
+        setLoading(false);
+      }, [messages, profile, fetchReply]);
+
+      return (
+        <div className="h-screen w-screen flex flex-col md:flex-row bg-white text-gray-900 overflow-hidden">
+          <Sidebar draft={draft} setDraft={setDraft} onApply={handleApply} applied={applied} />
+          <ChatArea profile={profile} messages={messages} loading={loading} onSend={handleSend} />
+        </div>
+      );
+    }
+
+    // ========================================
+    // Rendering
+    // ========================================
+    ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+  </script>
+</body>
+</html>

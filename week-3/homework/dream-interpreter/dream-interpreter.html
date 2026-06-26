@@ -1,0 +1,386 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>🌙 몽선생의 꿈 해몽</title>
+
+  <!-- ⚠️ 모든 CDN 버전 고정. Babel 은 반드시 7.x. -->
+  <script src="https://cdn.tailwindcss.com/3.4.16"></script>
+  <script src="https://unpkg.com/react@18.3.1/umd/react.development.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone@7.25.9/babel.min.js"></script>
+
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Nanum+Myeongjo:wght@400;700;800&family=Noto+Sans+KR:wght@300;400;500;700&display=swap" rel="stylesheet">
+
+  <style>
+    :root {
+      --bg-base-1: #0b0420;
+      --bg-base-2: #1a0e3d;
+      --bg-base-3: #2a1255;
+    }
+    * { -webkit-tap-highlight-color: transparent; }
+    body {
+      font-family: 'Noto Sans KR', sans-serif;
+      background: radial-gradient(ellipse at 50% -10%, var(--bg-base-3) 0%, var(--bg-base-2) 40%, var(--bg-base-1) 100%);
+      min-height: 100vh;
+      transition: background 1.2s ease;
+      overflow-x: hidden;
+    }
+    /* 길흉에 따른 배경 분위기 */
+    body.mood-good { --bg-base-3: #133a2e; --bg-base-2: #122f3a; }
+    body.mood-bad  { --bg-base-3: #45132a; --bg-base-2: #2e1230; }
+    body.mood-neutral { --bg-base-3: #3a3312; --bg-base-2: #2a2412; }
+
+    .font-serif-kr { font-family: 'Nanum Myeongjo', serif; }
+
+    /* 반짝이는 별 배경 (CSS only) */
+    .stars-layer {
+      position: fixed; inset: 0; pointer-events: none; z-index: 0;
+      background-repeat: repeat;
+    }
+    .stars-1 {
+      background-image:
+        radial-gradient(1px 1px at 20px 30px, #fff, transparent),
+        radial-gradient(1px 1px at 120px 80px, #fff, transparent),
+        radial-gradient(1.5px 1.5px at 200px 160px, #cbb8ff, transparent),
+        radial-gradient(1px 1px at 300px 50px, #fff, transparent),
+        radial-gradient(1px 1px at 360px 220px, #fff, transparent);
+      background-size: 400px 300px;
+      animation: twinkle 4s ease-in-out infinite;
+    }
+    .stars-2 {
+      background-image:
+        radial-gradient(1.5px 1.5px at 80px 120px, #fff, transparent),
+        radial-gradient(1px 1px at 250px 40px, #e0d4ff, transparent),
+        radial-gradient(2px 2px at 340px 180px, #fff, transparent),
+        radial-gradient(1px 1px at 50px 250px, #fff, transparent);
+      background-size: 450px 350px;
+      animation: twinkle 6s ease-in-out infinite 1s;
+      opacity: 0.6;
+    }
+    @keyframes twinkle {
+      0%, 100% { opacity: 0.25; }
+      50% { opacity: 0.9; }
+    }
+
+    /* 수정구슬 회전 */
+    @keyframes orb-spin {
+      0% { transform: rotate(0deg) scale(1); }
+      50% { transform: rotate(180deg) scale(1.08); }
+      100% { transform: rotate(360deg) scale(1); }
+    }
+    .orb-spin { animation: orb-spin 3s ease-in-out infinite; display: inline-block; }
+
+    @keyframes float-moon {
+      0%, 100% { transform: translateY(0); }
+      50% { transform: translateY(-10px); }
+    }
+    .float-moon { animation: float-moon 5s ease-in-out infinite; display: inline-block; }
+
+    @keyframes fade-up {
+      from { opacity: 0; transform: translateY(16px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    .fade-up { animation: fade-up 0.6s ease both; }
+
+    @keyframes glow-pulse {
+      0%, 100% { box-shadow: 0 0 24px 2px var(--glow-c, rgba(168,85,247,0.5)); }
+      50% { box-shadow: 0 0 42px 8px var(--glow-c, rgba(168,85,247,0.8)); }
+    }
+    .glow-pulse { animation: glow-pulse 2.6s ease-in-out infinite; }
+
+    /* progress bar fill */
+    .luck-fill { transition: width 1.2s cubic-bezier(.2,.8,.2,1); }
+
+    textarea::placeholder { color: rgba(203,184,255,0.45); }
+    ::-webkit-scrollbar { width: 8px; }
+    ::-webkit-scrollbar-thumb { background: rgba(168,85,247,0.4); border-radius: 8px; }
+  </style>
+</head>
+<body>
+  <div class="stars-layer stars-1"></div>
+  <div class="stars-layer stars-2"></div>
+  <div id="root" style="position: relative; z-index: 1;"></div>
+
+  <script type="text/babel">
+    const { useState, useEffect, useCallback } = React;
+
+    // ========================================
+    // 📡 API 설정
+    // ========================================
+    const API_BASE_URL = '/api';
+
+    // ========================================
+    // 🎨 Design System Components
+    // ========================================
+
+    function Button({ children, onClick, disabled, variant = 'primary', className = '' }) {
+      const base = 'inline-flex items-center justify-center gap-2 font-semibold rounded-full px-7 py-3.5 text-base transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-purple-400/60 disabled:opacity-50 disabled:cursor-not-allowed active:scale-95';
+      const variants = {
+        primary: 'bg-gradient-to-r from-purple-600 via-fuchsia-600 to-indigo-600 text-white shadow-lg shadow-purple-900/50 hover:shadow-purple-500/50 hover:brightness-110',
+        ghost: 'bg-white/5 text-purple-100 border border-purple-300/30 hover:bg-white/10 backdrop-blur-sm',
+      };
+      return (
+        <button onClick={onClick} disabled={disabled} className={`${base} ${variants[variant]} ${className}`}>
+          {children}
+        </button>
+      );
+    }
+
+    function Card({ children, className = '' }) {
+      return (
+        <div className={`rounded-3xl bg-white/[0.06] backdrop-blur-xl border border-white/10 shadow-2xl shadow-black/40 ${className}`}>
+          {children}
+        </div>
+      );
+    }
+
+    function Chip({ children }) {
+      return (
+        <span className="inline-flex items-center gap-1 rounded-full bg-gradient-to-r from-purple-500/25 to-fuchsia-500/25 border border-purple-300/30 px-3.5 py-1.5 text-sm text-purple-100 font-medium">
+          ✦ {children}
+        </span>
+      );
+    }
+
+    // ========================================
+    // 🔮 Omen(길흉) 메타 정보
+    // ========================================
+    const OMEN_META = {
+      '길몽': { emoji: '🍀', glow: 'rgba(16,185,129,0.7)', mood: 'mood-good',
+        badge: 'from-emerald-500 to-teal-500', text: 'text-emerald-50', sub: '좋은 기운이 깃든 꿈' },
+      '흉몽': { emoji: '🥀', glow: 'rgba(244,63,94,0.7)', mood: 'mood-bad',
+        badge: 'from-rose-500 to-red-600', text: 'text-rose-50', sub: '경계가 필요한 꿈' },
+      '중립몽': { emoji: '🌗', glow: 'rgba(245,158,11,0.7)', mood: 'mood-neutral',
+        badge: 'from-amber-400 to-yellow-500', text: 'text-amber-50', sub: '평온한 기운의 꿈' },
+    };
+    const getOmen = (o) => OMEN_META[o] || OMEN_META['중립몽'];
+
+    // ========================================
+    // 📄 입력 화면
+    // ========================================
+    function InputView({ dream, setDream, onSubmit }) {
+      const handleKey = (e) => {
+        if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') onSubmit();
+      };
+      return (
+        <div className="fade-up w-full max-w-2xl mx-auto text-center">
+          <div className="text-7xl sm:text-8xl mb-4"><span className="float-moon">🌙</span></div>
+          <h1 className="font-serif-kr text-4xl sm:text-5xl font-extrabold text-white tracking-tight mb-3">
+            몽선생의 꿈 해몽
+          </h1>
+          <p className="text-purple-200/70 text-base sm:text-lg mb-10 font-light">
+            지난밤 꿈을 들려주시게나. 천기를 읽어 그 뜻을 풀어주리니… ✦
+          </p>
+
+          <Card className="p-6 sm:p-7 text-left">
+            <label className="block text-sm text-purple-200/80 mb-3 font-medium">어젯밤, 어떤 꿈을 꾸셨나요?</label>
+            <textarea
+              value={dream}
+              onChange={(e) => setDream(e.target.value)}
+              onKeyDown={handleKey}
+              rows={6}
+              placeholder="예) 하늘을 날아 별들 사이를 지나다가, 거대한 흰 용을 만나 함께 바다 위를 떠다녔습니다…"
+              className="w-full resize-none rounded-2xl bg-black/30 border border-purple-300/20 text-purple-50 placeholder-purple-300/40 p-4 leading-relaxed focus:outline-none focus:ring-2 focus:ring-purple-400/50 transition"
+            />
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mt-5">
+              <span className="text-xs text-purple-300/50">⌘/Ctrl + Enter 로 해몽</span>
+              <Button onClick={onSubmit} disabled={!dream.trim()}>✦ 꿈을 해몽하라 ✦</Button>
+            </div>
+          </Card>
+        </div>
+      );
+    }
+
+    // ========================================
+    // 📄 로딩 화면
+    // ========================================
+    function LoadingView() {
+      return (
+        <div className="fade-up flex flex-col items-center justify-center text-center py-16">
+          <div className="text-8xl mb-8"><span className="orb-spin">🔮</span></div>
+          <h2 className="font-serif-kr text-2xl sm:text-3xl text-purple-100 mb-3">천기(天機)를 읽는 중이로다…</h2>
+          <p className="text-purple-300/60">별들이 그대의 꿈을 속삭이고 있습니다 ✦</p>
+          <div className="flex gap-2 mt-8">
+            {[0,1,2].map(i => (
+              <span key={i} className="w-2.5 h-2.5 rounded-full bg-purple-400 animate-bounce"
+                    style={{ animationDelay: `${i*0.18}s` }}></span>
+            ))}
+          </div>
+        </div>
+      );
+    }
+
+    // ========================================
+    // 📄 결과 화면
+    // ========================================
+    function ResultView({ result, onReset }) {
+      const meta = getOmen(result.omen);
+      const [fillW, setFillW] = useState(0);
+      const score = Math.max(0, Math.min(100, Number(result.luckScore) || 0));
+
+      useEffect(() => {
+        const t = setTimeout(() => setFillW(score), 200);
+        return () => clearTimeout(t);
+      }, [score]);
+
+      const fullStars = Math.round(score / 20);
+
+      return (
+        <div className="fade-up w-full max-w-2xl mx-auto">
+          <Card className="p-6 sm:p-9">
+            {/* 1. 길흉 배지 */}
+            <div className="flex flex-col items-center text-center mb-8">
+              <div className="glow-pulse rounded-full mb-4" style={{ '--glow-c': meta.glow }}>
+                <div className={`bg-gradient-to-r ${meta.badge} rounded-full px-7 py-3 flex items-center gap-2`}>
+                  <span className="text-2xl">{meta.emoji}</span>
+                  <span className={`font-serif-kr text-2xl font-bold ${meta.text}`}>{result.omen}</span>
+                </div>
+              </div>
+              <p className="text-purple-200/60 text-sm">{meta.sub}</p>
+            </div>
+
+            {/* 2. 행운지수 */}
+            <div className="mb-8">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-purple-100 font-medium text-sm flex items-center gap-1">🌟 행운지수</span>
+                <span className="text-purple-50 font-bold font-serif-kr text-lg">{score}<span className="text-purple-300/60 text-sm font-normal">/100</span></span>
+              </div>
+              <div className="h-3.5 rounded-full bg-black/40 overflow-hidden border border-white/10">
+                <div className="luck-fill h-full rounded-full bg-gradient-to-r from-fuchsia-400 via-purple-400 to-indigo-400"
+                     style={{ width: `${fillW}%` }}></div>
+              </div>
+              <div className="flex gap-1 mt-2 justify-center text-lg">
+                {[1,2,3,4,5].map(i => (
+                  <span key={i} className={i <= fullStars ? 'opacity-100' : 'opacity-25'}>⭐</span>
+                ))}
+              </div>
+            </div>
+
+            {/* 3. 한 줄 요약 */}
+            <div className="text-center mb-8 px-2">
+              <p className="font-serif-kr text-xl sm:text-2xl text-white leading-relaxed">“{result.summary}”</p>
+            </div>
+
+            {/* 4. 상징 키워드 */}
+            {Array.isArray(result.keywords) && result.keywords.length > 0 && (
+              <div className="mb-8">
+                <h3 className="text-purple-200/70 text-sm font-medium mb-3 text-center">상징 키워드</h3>
+                <div className="flex flex-wrap gap-2.5 justify-center">
+                  {result.keywords.map((k, i) => <Chip key={i}>{k}</Chip>)}
+                </div>
+              </div>
+            )}
+
+            {/* 5. 몽선생의 해몽 */}
+            <div className="mb-8 rounded-2xl bg-black/25 border border-white/10 p-5 sm:p-6">
+              <h3 className="font-serif-kr text-lg text-purple-100 mb-3 flex items-center gap-2">🔮 몽선생의 해몽</h3>
+              <p className="text-purple-100/85 leading-loose font-light whitespace-pre-line">{result.interpretation}</p>
+            </div>
+
+            {/* 6. 오늘의 한 줄 조언 */}
+            <div className="rounded-2xl bg-gradient-to-r from-amber-500/15 to-yellow-500/10 border border-amber-300/30 p-5 flex items-start gap-3">
+              <span className="text-2xl shrink-0">⭐</span>
+              <div>
+                <p className="text-amber-200/80 text-xs font-semibold mb-1 tracking-wide">오늘의 한 줄 조언</p>
+                <p className="text-amber-50 leading-relaxed font-medium">{result.advice}</p>
+              </div>
+            </div>
+          </Card>
+
+          {/* 7. 다시 */}
+          <div className="text-center mt-7">
+            <Button variant="ghost" onClick={onReset}>🌙 다른 꿈 해몽하기</Button>
+          </div>
+        </div>
+      );
+    }
+
+    // ========================================
+    // 📄 에러 화면
+    // ========================================
+    function ErrorView({ message, onRetry }) {
+      return (
+        <div className="fade-up w-full max-w-md mx-auto text-center">
+          <Card className="p-8">
+            <div className="text-6xl mb-4">🌫️</div>
+            <h2 className="font-serif-kr text-2xl text-white mb-3">천기가 흐려졌습니다</h2>
+            <p className="text-purple-200/70 leading-relaxed mb-6">{message}</p>
+            <Button variant="ghost" onClick={onRetry}>다시 시도하기</Button>
+          </Card>
+        </div>
+      );
+    }
+
+    // ========================================
+    // 🚀 App
+    // ========================================
+    function App() {
+      const [view, setView] = useState('input'); // input | loading | result | error
+      const [dream, setDream] = useState('');
+      const [result, setResult] = useState(null);
+      const [error, setError] = useState('');
+
+      // 길흉에 따라 body 배경 분위기 변경
+      useEffect(() => {
+        document.body.classList.remove('mood-good', 'mood-bad', 'mood-neutral');
+        if (view === 'result' && result) {
+          document.body.classList.add(getOmen(result.omen).mood);
+        }
+      }, [view, result]);
+
+      const handleSubmit = useCallback(async () => {
+        const text = dream.trim();
+        if (!text) return;
+        setView('loading');
+        setError('');
+        try {
+          const res = await fetch(`${API_BASE_URL}/dream`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ dream: text }),
+          });
+          if (!res.ok) throw new Error(`서버 응답 오류 (${res.status})`);
+          const data = await res.json();
+          if (!data || !data.interpretation) throw new Error('해몽 결과를 받지 못했습니다.');
+          setResult(data);
+          setView('result');
+        } catch (e) {
+          setError(
+            e.message === 'Failed to fetch'
+              ? '서버에 닿을 수 없습니다. 잠시 후 다시 시도해주세요.'
+              : (e.message || '알 수 없는 오류가 발생했습니다.')
+          );
+          setView('error');
+        }
+      }, [dream]);
+
+      const reset = () => {
+        setResult(null);
+        setError('');
+        setDream('');
+        setView('input');
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      };
+
+      return (
+        <div className="min-h-screen w-full px-4 py-10 sm:py-16 flex items-center justify-center">
+          {view === 'input' && <InputView dream={dream} setDream={setDream} onSubmit={handleSubmit} />}
+          {view === 'loading' && <LoadingView />}
+          {view === 'result' && result && <ResultView result={result} onReset={reset} />}
+          {view === 'error' && <ErrorView message={error} onRetry={() => setView('input')} />}
+        </div>
+      );
+    }
+
+    // ========================================
+    // Rendering
+    // ========================================
+    ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+  </script>
+</body>
+</html>

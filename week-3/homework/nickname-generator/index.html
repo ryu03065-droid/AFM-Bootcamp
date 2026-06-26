@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AI 별명 생성기 ✨</title>
+  <script src="https://cdn.tailwindcss.com/3.4.16"></script>
+  <!-- ⚠️ 모든 CDN 버전 고정. Babel 은 반드시 7.x (8.x 미지원). -->
+  <script src="https://unpkg.com/react@18.3.1/umd/react.development.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone@7.25.9/babel.min.js"></script>
+  <style>
+    @keyframes float {
+      0%, 100% { transform: translateY(0); }
+      50% { transform: translateY(-8px); }
+    }
+    .animate-float { animation: float 3s ease-in-out infinite; }
+    @keyframes pop-in {
+      0% { opacity: 0; transform: scale(0.85) translateY(10px); }
+      100% { opacity: 1; transform: scale(1) translateY(0); }
+    }
+    .animate-pop-in { animation: pop-in 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) both; }
+    @keyframes gradient-shift {
+      0%, 100% { background-position: 0% 50%; }
+      50% { background-position: 100% 50%; }
+    }
+    .animated-gradient {
+      background-size: 200% 200%;
+      animation: gradient-shift 6s ease infinite;
+    }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="text/babel">
+    // ========================================
+    // React Hooks
+    // ========================================
+    const { useState } = React;
+
+    // ========================================
+    // 🎨 Design System Components
+    // ========================================
+
+    function Button({ variant = "primary", size = "md", disabled, onClick, className = "", children, type = "button" }) {
+      const base = "inline-flex items-center justify-center gap-2 font-bold rounded-2xl transition-all duration-200 focus:outline-none focus:ring-4 disabled:opacity-50 disabled:cursor-not-allowed active:scale-95";
+      const variants = {
+        primary: "text-white animated-gradient bg-gradient-to-r from-fuchsia-500 via-pink-500 to-orange-400 shadow-lg shadow-pink-300/50 hover:shadow-xl hover:shadow-pink-400/50 focus:ring-pink-200",
+        secondary: "bg-white text-pink-600 border-2 border-pink-200 hover:border-pink-400 hover:bg-pink-50 focus:ring-pink-100",
+        ghost: "bg-white/70 text-gray-600 hover:bg-white focus:ring-gray-100",
+      };
+      const sizes = {
+        sm: "px-3 py-1.5 text-sm",
+        md: "px-5 py-2.5 text-base",
+        lg: "px-8 py-4 text-lg",
+      };
+      return (
+        <button
+          type={type}
+          onClick={onClick}
+          disabled={disabled}
+          className={`${base} ${variants[variant]} ${sizes[size]} ${className}`}
+        >
+          {children}
+        </button>
+      );
+    }
+
+    function Input({ label, icon, value, onChange, placeholder, disabled }) {
+      return (
+        <label className="block">
+          <span className="flex items-center gap-1.5 mb-2 text-sm font-bold text-gray-700">
+            <span className="text-lg">{icon}</span>{label}
+          </span>
+          <input
+            type="text"
+            value={value}
+            onChange={onChange}
+            placeholder={placeholder}
+            disabled={disabled}
+            className="w-full px-4 py-3 rounded-2xl border-2 border-gray-200 bg-white/80 text-gray-800 placeholder-gray-400 transition-all focus:outline-none focus:border-pink-400 focus:ring-4 focus:ring-pink-100 disabled:bg-gray-100"
+          />
+        </label>
+      );
+    }
+
+    function Card({ className = "", children, ...rest }) {
+      return (
+        <div className={`rounded-3xl bg-white shadow-xl ${className}`} {...rest}>
+          {children}
+        </div>
+      );
+    }
+
+    // ========================================
+    // 🧩 Nickname Card
+    // ========================================
+
+    function NicknameCard({ nickname, index, selected, onSelect, onCopy, copied }) {
+      const palettes = [
+        "from-rose-400 to-pink-500",
+        "from-amber-400 to-orange-500",
+        "from-violet-400 to-purple-500",
+        "from-sky-400 to-blue-500",
+        "from-emerald-400 to-teal-500",
+      ];
+      const palette = palettes[index % palettes.length];
+      return (
+        <div
+          onClick={onSelect}
+          style={{ animationDelay: `${index * 80}ms` }}
+          className={`animate-pop-in cursor-pointer group relative overflow-hidden rounded-2xl p-0.5 transition-all duration-200 hover:-translate-y-1 hover:shadow-xl ${
+            selected ? "ring-4 ring-pink-300 shadow-xl scale-[1.02]" : "shadow-md"
+          }`}
+        >
+          <div className={`absolute inset-0 bg-gradient-to-br ${palette} ${selected ? "opacity-100" : "opacity-80 group-hover:opacity-100"} transition-opacity`}></div>
+          <div className="relative flex items-center justify-between gap-3 rounded-[14px] bg-white px-5 py-4">
+            <div className="flex items-center gap-3 min-w-0">
+              <span className={`flex-shrink-0 grid place-items-center w-9 h-9 rounded-full bg-gradient-to-br ${palette} text-white font-black text-sm`}>
+                {index + 1}
+              </span>
+              <span className="truncate text-lg font-extrabold text-gray-800">{nickname}</span>
+              {selected && (
+                <span className="flex-shrink-0 rounded-full bg-pink-100 px-2 py-0.5 text-xs font-bold text-pink-600">선택됨</span>
+              )}
+            </div>
+            <button
+              onClick={(e) => { e.stopPropagation(); onCopy(); }}
+              aria-label="별명 복사"
+              className={`flex-shrink-0 grid place-items-center w-10 h-10 rounded-xl transition-all active:scale-90 ${
+                copied ? "bg-green-100 text-green-600" : "bg-gray-100 text-gray-500 hover:bg-pink-100 hover:text-pink-600"
+              }`}
+            >
+              {copied ? "✓" : "📋"}
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    // ========================================
+    // 📄 Main Page
+    // ========================================
+
+    function NicknameGenerator() {
+      const [name, setName] = useState("");
+      const [personality, setPersonality] = useState("");
+      const [hobby, setHobby] = useState("");
+      const [loading, setLoading] = useState(false);
+      const [nicknames, setNicknames] = useState([]);
+      const [selected, setSelected] = useState(null);
+      const [copiedIndex, setCopiedIndex] = useState(null);
+
+      const handleGenerate = async (e) => {
+        e.preventDefault();
+        if (!name.trim()) return;
+        setLoading(true);
+        setNicknames([]);
+        setSelected(null);
+        setCopiedIndex(null);
+
+        try {
+          const res = await fetch('/api/nickname', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name, personality, hobby }),
+          });
+          const data = await res.json();
+          setNicknames(data.nicknames || []);
+        } catch (err) {
+          setNicknames(['별명 생성 실패 😢 서버를 확인해주세요']);
+        } finally {
+          setLoading(false);
+        }
+      };
+
+      const handleCopy = (text, index) => {
+        navigator.clipboard?.writeText(text);
+        setCopiedIndex(index);
+        setTimeout(() => setCopiedIndex((cur) => (cur === index ? null : cur)), 1500);
+      };
+
+      const canSubmit = name.trim() && !loading;
+
+      return (
+        <div className="min-h-screen w-full animated-gradient bg-gradient-to-br from-rose-100 via-fuchsia-100 to-sky-100 py-8 px-4 sm:py-12">
+          <div className="mx-auto max-w-xl">
+
+            {/* Header */}
+            <header className="text-center mb-8">
+              <div className="animate-float inline-block text-6xl mb-3">✨</div>
+              <h1 className="text-3xl sm:text-4xl font-black bg-gradient-to-r from-fuchsia-600 via-pink-500 to-orange-500 bg-clip-text text-transparent">
+                AI 별명 생성기
+              </h1>
+              <p className="mt-2 text-gray-500 font-medium">나만의 개성 넘치는 별명을 만들어 보세요!</p>
+            </header>
+
+            {/* 입력 폼 */}
+            <Card className="p-6 sm:p-8 mb-6">
+              <form onSubmit={handleGenerate} className="space-y-5">
+                <Input
+                  label="이름"
+                  icon="🙋"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder="예: 민지"
+                  disabled={loading}
+                />
+                <Input
+                  label="성격"
+                  icon="😎"
+                  value={personality}
+                  onChange={(e) => setPersonality(e.target.value)}
+                  placeholder="예: 활발함, 조용함, 유머러스..."
+                  disabled={loading}
+                />
+                <Input
+                  label="취미"
+                  icon="🎨"
+                  value={hobby}
+                  onChange={(e) => setHobby(e.target.value)}
+                  placeholder="예: 독서, 게임, 요리..."
+                  disabled={loading}
+                />
+                <Button type="submit" size="lg" disabled={!canSubmit} className="w-full">
+                  {loading ? "별명 생성 중..." : "🎁 별명 생성하기"}
+                </Button>
+              </form>
+            </Card>
+
+            {/* 결과 영역 */}
+            <div aria-live="polite">
+              {loading && (
+                <Card className="p-10 flex flex-col items-center gap-4">
+                  <div className="flex gap-2">
+                    {[0, 1, 2].map((i) => (
+                      <span
+                        key={i}
+                        style={{ animationDelay: `${i * 0.15}s` }}
+                        className="w-3.5 h-3.5 rounded-full bg-gradient-to-br from-pink-400 to-fuchsia-500 animate-bounce"
+                      ></span>
+                    ))}
+                  </div>
+                  <p className="font-bold text-gray-600">AI가 별명을 짓고 있어요...</p>
+                </Card>
+              )}
+
+              {!loading && nicknames.length > 0 && (
+                <div>
+                  <div className="flex items-center justify-between mb-3 px-1">
+                    <h2 className="font-extrabold text-gray-700">🎉 생성된 별명</h2>
+                    <span className="text-sm text-gray-400 font-medium">카드를 클릭해 선택하세요</span>
+                  </div>
+                  <div className="space-y-3">
+                    {nicknames.map((nick, i) => (
+                      <NicknameCard
+                        key={i}
+                        index={i}
+                        nickname={nick}
+                        selected={selected === i}
+                        onSelect={() => setSelected(i)}
+                        onCopy={() => handleCopy(nick, i)}
+                        copied={copiedIndex === i}
+                      />
+                    ))}
+                  </div>
+                  {selected !== null && (
+                    <Card className="mt-4 p-4 flex items-center justify-center gap-2 bg-gradient-to-r from-pink-50 to-fuchsia-50">
+                      <span className="text-gray-600 font-medium">선택한 별명:</span>
+                      <span className="font-extrabold text-pink-600">{nicknames[selected]}</span>
+                    </Card>
+                  )}
+                </div>
+              )}
+
+              {!loading && nicknames.length === 0 && (
+                <div className="text-center py-10 text-gray-400">
+                  <div className="text-5xl mb-3 opacity-60">🪄</div>
+                  <p className="font-medium">정보를 입력하고 별명을 생성해 보세요!</p>
+                </div>
+              )}
+            </div>
+
+            <footer className="text-center mt-10 text-xs text-gray-400">
+              ✨ Powered by Groq · llama-3.1-8b-instant
+            </footer>
+          </div>
+        </div>
+      );
+    }
+
+    // ========================================
+    // 🚀 App & Render
+    // ========================================
+    function App() {
+      return <NicknameGenerator />;
+    }
+
+    ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+  </script>
+</body>
+</html>

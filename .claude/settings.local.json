@@ -28,7 +28,27 @@
       "Bash(git *)",
       "Bash(gh auth *)",
       "Bash(gh repo *)",
-      "WebSearch"
+      "WebSearch",
+      "Bash(curl *)",
+      "mcp__playwright__browser_navigate",
+      "mcp__playwright__browser_console_messages",
+      "mcp__playwright__browser_wait_for",
+      "mcp__playwright__browser_snapshot",
+      "Bash(npm --version)",
+      "WebFetch(domain:ruucm.notion.site)",
+      "Skill(claude-in-chrome)",
+      "Bash(lsof -ti:8080)",
+      "Bash(xargs kill -9)",
+      "Bash(python3 -m http.server 8080)",
+      "mcp__playwright__browser_take_screenshot",
+      "Bash(lsof -ti:3000)",
+      "Bash(node /Users/ahnsoeun/Downloads/AFM-Bootcamp/week-3/homework/my-chatgpt/server.js)",
+      "Bash(python3 *)",
+      "Bash(lsof -ti:3001)",
+      "Bash(node *)",
+      "Bash(kill 72195 99287)",
+      "Bash(lsof -nP -iTCP:3000 -sTCP:LISTEN)",
+      "Bash(kill 76765)"
     ]
   }
 }
