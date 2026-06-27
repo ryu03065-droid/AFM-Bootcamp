@@ -1,0 +1,10 @@
+{
+  "nextId": 6,
+  "todos": [
+    { "id": 1, "title": "집에 가서 뭐하지?", "completed": true },
+    { "id": 2, "title": "과제 완성", "completed": false },
+    { "id": 3, "title": "프로젝트 아이디어 구상", "completed": false },
+    { "id": 4, "title": "코드 리뷰", "completed": false },
+    { "id": 5, "title": "다음 주 준비", "completed": false }
+  ]
+}

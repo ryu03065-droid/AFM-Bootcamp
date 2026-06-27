@@ -1,0 +1,369 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>메모장</title>
+  <script src="https://cdn.tailwindcss.com/3.4.16"></script>
+  <!-- ⚠️ 모든 CDN 버전 고정. Babel 은 반드시 7.x. -->
+  <script src="https://unpkg.com/react@18.3.1/umd/react.development.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone@7.25.9/babel.min.js"></script>
+  <style>
+    /* Tailwind 으로 표현하기 어려운 스크롤바 스타일만 */
+    .thin-scroll::-webkit-scrollbar { width: 8px; }
+    .thin-scroll::-webkit-scrollbar-thumb { background: #d4d4d8; border-radius: 4px; }
+    .thin-scroll::-webkit-scrollbar-track { background: transparent; }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="text/babel">
+    // ========================================
+    // React Hooks
+    // ========================================
+    const { useState, useEffect, useRef, useMemo, useCallback } = React;
+
+    const API_BASE_URL = '/api';
+
+    // ========================================
+    // 유틸: 상대 시간 표기
+    // ========================================
+    function relativeTime(iso) {
+      const then = new Date(iso).getTime();
+      const diff = Date.now() - then;
+      const sec = Math.floor(diff / 1000);
+      const min = Math.floor(sec / 60);
+      const hour = Math.floor(min / 60);
+      const day = Math.floor(hour / 24);
+
+      if (sec < 60) return "방금 전";
+      if (min < 60) return `${min}분 전`;
+      if (hour < 24) return `${hour}시간 전`;
+      if (day === 1) return "어제";
+      if (day < 7) return `${day}일 전`;
+      return new Date(iso).toLocaleDateString("ko-KR", { year: "numeric", month: "long", day: "numeric" });
+    }
+
+    // ========================================
+    // 🎨 Design System Components
+    // ========================================
+    function Button({ variant = "primary", size = "md", className = "", children, ...props }) {
+      const base = "inline-flex items-center justify-center font-medium rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-offset-1 disabled:opacity-50 disabled:cursor-not-allowed";
+      const variants = {
+        primary: "bg-yellow-400 hover:bg-yellow-500 text-gray-900 focus:ring-yellow-300",
+        secondary: "bg-gray-100 hover:bg-gray-200 text-gray-700 focus:ring-gray-300",
+        danger: "bg-red-500 hover:bg-red-600 text-white focus:ring-red-300",
+        ghost: "bg-transparent hover:bg-gray-100 text-gray-600 focus:ring-gray-300",
+      };
+      const sizes = {
+        sm: "text-xs px-2.5 py-1.5 gap-1",
+        md: "text-sm px-3.5 py-2 gap-1.5",
+        lg: "text-base px-4 py-2.5 gap-2",
+      };
+      return (
+        <button className={`${base} ${variants[variant]} ${sizes[size]} ${className}`} {...props}>
+          {children}
+        </button>
+      );
+    }
+
+    function IconButton({ className = "", children, ...props }) {
+      return (
+        <button
+          className={`inline-flex items-center justify-center w-9 h-9 rounded-lg text-gray-500 hover:bg-gray-100 hover:text-gray-800 transition-colors focus:outline-none focus:ring-2 focus:ring-gray-300 ${className}`}
+          {...props}
+        >
+          {children}
+        </button>
+      );
+    }
+
+    function Modal({ isOpen, onClose, title, children, footer }) {
+      if (!isOpen) return null;
+      return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" role="dialog" aria-modal="true">
+          <div className="absolute inset-0 bg-black/30" onClick={onClose} aria-hidden="true"></div>
+          <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-sm p-6">
+            {title && <h2 className="text-lg font-semibold text-gray-900 mb-2">{title}</h2>}
+            <div className="text-sm text-gray-600">{children}</div>
+            {footer && <div className="mt-6 flex justify-end gap-2">{footer}</div>}
+          </div>
+        </div>
+      );
+    }
+
+    // ========================================
+    // 🧩 Sidebar 컴포넌트
+    // ========================================
+    function MemoListItem({ memo, active, onSelect }) {
+      const firstLine = (memo.content || "").split("\n").find(l => l.trim()) || "추가 텍스트 없음";
+      return (
+        <button
+          onClick={() => onSelect(memo.id)}
+          className={`w-full text-left px-4 py-3 border-b border-gray-100 transition-colors ${
+            active ? "bg-yellow-100" : "hover:bg-gray-50"
+          }`}
+        >
+          <div className="font-semibold text-gray-900 truncate">
+            {memo.title.trim() || "제목 없음"}
+          </div>
+          <div className="flex items-center gap-2 mt-0.5">
+            <span className="text-xs text-gray-400 shrink-0">{relativeTime(memo.created_at)}</span>
+            <span className="text-xs text-gray-400 truncate">{firstLine}</span>
+          </div>
+        </button>
+      );
+    }
+
+    function Sidebar({ memos, selectedId, onSelect, onNew, search, setSearch }) {
+      return (
+        <aside className="w-72 lg:w-80 shrink-0 border-r border-gray-200 bg-gray-50 flex flex-col h-full">
+          {/* 헤더 */}
+          <div className="px-4 pt-4 pb-3 border-b border-gray-200">
+            <div className="flex items-center justify-between mb-3">
+              <h1 className="text-base font-bold text-gray-900">
+                메모 <span className="text-gray-400 font-normal">{memos.length}</span>
+              </h1>
+              <Button size="sm" onClick={onNew} aria-label="새 메모">
+                <span className="text-base leading-none">＋</span> 새 메모
+              </Button>
+            </div>
+            {/* 검색 */}
+            <div className="relative">
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">🔍</span>
+              <input
+                type="text"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="검색"
+                className="w-full pl-9 pr-3 py-2 text-sm bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-yellow-300"
+              />
+            </div>
+          </div>
+          {/* 목록 */}
+          <div className="flex-1 overflow-y-auto thin-scroll">
+            {memos.length === 0 ? (
+              <div className="px-4 py-10 text-center text-sm text-gray-400">
+                {search ? "검색 결과가 없습니다." : "메모가 없습니다."}
+              </div>
+            ) : (
+              memos.map((m) => (
+                <MemoListItem key={m.id} memo={m} active={m.id === selectedId} onSelect={onSelect} />
+              ))
+            )}
+          </div>
+        </aside>
+      );
+    }
+
+    // ========================================
+    // 📄 Editor 컴포넌트
+    // ========================================
+    function Editor({ memo, onChange, onDelete }) {
+      const [title, setTitle] = useState(memo.title);
+      const [content, setContent] = useState(memo.content);
+      const [savedFlag, setSavedFlag] = useState(false);
+      const timer = useRef(null);
+      const savedTimer = useRef(null);
+
+      // 선택된 메모가 바뀌면 로컬 상태 동기화
+      useEffect(() => {
+        setTitle(memo.title);
+        setContent(memo.content);
+      }, [memo.id]);
+
+      const flashSaved = useCallback(() => {
+        setSavedFlag(true);
+        clearTimeout(savedTimer.current);
+        savedTimer.current = setTimeout(() => setSavedFlag(false), 1200);
+      }, []);
+
+      // 타이핑 멈춘 뒤 자동 저장 (debounce)
+      const scheduleSave = useCallback((nextTitle, nextContent) => {
+        clearTimeout(timer.current);
+        timer.current = setTimeout(() => {
+          onChange(memo.id, { title: nextTitle, content: nextContent });
+          flashSaved();
+        }, 600);
+      }, [memo.id, onChange, flashSaved]);
+
+      // blur 시 즉시 저장
+      const saveNow = useCallback(() => {
+        clearTimeout(timer.current);
+        onChange(memo.id, { title, content });
+        flashSaved();
+      }, [memo.id, title, content, onChange, flashSaved]);
+
+      useEffect(() => () => clearTimeout(timer.current), []);
+
+      return (
+        <section className="flex-1 flex flex-col h-full bg-white min-w-0">
+          {/* 툴바 */}
+          <div className="flex items-center justify-between px-6 py-3 border-b border-gray-100">
+            <span className="text-xs text-gray-400">
+              {relativeTime(memo.created_at)}
+              {savedFlag && <span className="ml-2 text-green-500">저장됨</span>}
+            </span>
+            <IconButton onClick={() => onDelete(memo.id)} aria-label="메모 삭제" title="삭제">
+              🗑️
+            </IconButton>
+          </div>
+          {/* 본문 */}
+          <div className="flex-1 overflow-y-auto thin-scroll px-6 py-5">
+            <input
+              type="text"
+              value={title}
+              onChange={(e) => { setTitle(e.target.value); scheduleSave(e.target.value, content); }}
+              onBlur={saveNow}
+              placeholder="제목"
+              className="w-full text-2xl font-bold text-gray-900 placeholder-gray-300 focus:outline-none mb-3"
+            />
+            <textarea
+              value={content}
+              onChange={(e) => { setContent(e.target.value); scheduleSave(title, e.target.value); }}
+              onBlur={saveNow}
+              placeholder="내용을 입력하세요..."
+              className="w-full h-[calc(100%-3.5rem)] min-h-[300px] resize-none text-base leading-relaxed text-gray-700 placeholder-gray-300 focus:outline-none"
+            />
+          </div>
+        </section>
+      );
+    }
+
+    function EmptyState() {
+      return (
+        <section className="flex-1 flex flex-col items-center justify-center text-center bg-white">
+          <div className="text-6xl mb-4">📝</div>
+          <p className="text-gray-400 text-lg">메모를 선택하세요</p>
+        </section>
+      );
+    }
+
+    // ========================================
+    // 🚀 App
+    // ========================================
+    function App() {
+      const [memos, setMemos] = useState([]);
+      const [selectedId, setSelectedId] = useState(null);
+      const [search, setSearch] = useState("");
+      const [pendingDelete, setPendingDelete] = useState(null);
+      const [loading, setLoading] = useState(true);
+
+      // 초기 로드
+      useEffect(() => {
+        fetch(`${API_BASE_URL}/memos`)
+          .then(r => r.json())
+          .then(data => {
+            setMemos(data);
+            if (data.length > 0) setSelectedId(data[0].id);
+          })
+          .finally(() => setLoading(false));
+      }, []);
+
+      // 검색 필터 (정렬: 최신순)
+      const filtered = useMemo(() => {
+        const q = search.trim().toLowerCase();
+        const list = q
+          ? memos.filter(m =>
+              m.title.toLowerCase().includes(q) || m.content.toLowerCase().includes(q))
+          : memos;
+        return [...list].sort((a, b) => new Date(b.updated_at) - new Date(a.updated_at));
+      }, [memos, search]);
+
+      const selected = memos.find(m => m.id === selectedId) || null;
+
+      // 새 메모 생성
+      const handleNew = useCallback(async () => {
+        const res = await fetch(`${API_BASE_URL}/memos`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ title: '', content: '' }),
+        });
+        const memo = await res.json();
+        setMemos(prev => [memo, ...prev]);
+        setSelectedId(memo.id);
+        setSearch("");
+      }, []);
+
+      // 메모 수정
+      const handleChange = useCallback(async (id, patch) => {
+        setMemos(prev => prev.map(m =>
+          m.id === id ? { ...m, ...patch, updated_at: new Date().toISOString() } : m
+        ));
+        await fetch(`${API_BASE_URL}/memos/${id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(patch),
+        });
+      }, []);
+
+      // 메모 삭제
+      const handleDelete = useCallback(async (id) => {
+        await fetch(`${API_BASE_URL}/memos/${id}`, { method: 'DELETE' });
+        setMemos(prev => prev.filter(m => m.id !== id));
+        setSelectedId(prev => (prev === id ? null : prev));
+        setPendingDelete(null);
+      }, []);
+
+      if (loading) {
+        return (
+          <div className="h-screen w-screen flex items-center justify-center bg-white">
+            <div className="text-center">
+              <div className="w-10 h-10 border-4 border-yellow-200 border-t-yellow-400 rounded-full animate-spin mx-auto mb-3" />
+              <p className="text-gray-400 text-sm">메모를 불러오는 중...</p>
+            </div>
+          </div>
+        );
+      }
+
+      const deleteTarget = memos.find(m => m.id === pendingDelete);
+
+      return (
+        <div className="h-screen w-screen flex bg-white text-gray-900 overflow-hidden">
+          <Sidebar
+            memos={filtered}
+            selectedId={selectedId}
+            onSelect={setSelectedId}
+            onNew={handleNew}
+            search={search}
+            setSearch={setSearch}
+          />
+          {selected ? (
+            <Editor
+              key={selected.id}
+              memo={selected}
+              onChange={handleChange}
+              onDelete={(id) => setPendingDelete(id)}
+            />
+          ) : (
+            <EmptyState />
+          )}
+
+          <Modal
+            isOpen={pendingDelete !== null}
+            onClose={() => setPendingDelete(null)}
+            title="메모 삭제"
+            footer={
+              <>
+                <Button variant="secondary" onClick={() => setPendingDelete(null)}>취소</Button>
+                <Button variant="danger" onClick={() => handleDelete(pendingDelete)}>삭제</Button>
+              </>
+            }
+          >
+            <p>
+              "<span className="font-medium">{deleteTarget?.title.trim() || "제목 없음"}</span>"
+              메모를 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.
+            </p>
+          </Modal>
+        </div>
+      );
+    }
+
+    // ========================================
+    // Rendering
+    // ========================================
+    ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+  </script>
+</body>
+</html>
