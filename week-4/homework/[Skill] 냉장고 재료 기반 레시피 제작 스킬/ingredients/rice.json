@@ -1,0 +1,8 @@
+{
+  "name": "밥",
+  "nameEn": "cooked rice",
+  "quantity": 2,
+  "unit": "공기",
+  "category": "탄수화물",
+  "expiryDays": 2
+}

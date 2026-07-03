@@ -1,0 +1,8 @@
+{
+  "name": "김치",
+  "nameEn": "kimchi",
+  "quantity": 500,
+  "unit": "g",
+  "category": "발효식품",
+  "expiryDays": 30
+}

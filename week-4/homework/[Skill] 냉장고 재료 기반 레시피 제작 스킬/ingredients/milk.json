@@ -1,0 +1,8 @@
+{
+  "name": "우유",
+  "nameEn": "milk",
+  "quantity": 500,
+  "unit": "ml",
+  "category": "유제품",
+  "expiryDays": 7
+}

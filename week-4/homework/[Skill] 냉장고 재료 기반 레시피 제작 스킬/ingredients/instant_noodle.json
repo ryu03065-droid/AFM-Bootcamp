@@ -1,0 +1,8 @@
+{
+  "name": "라면",
+  "nameEn": "instant noodle",
+  "quantity": 3,
+  "unit": "개",
+  "category": "면류",
+  "expiryDays": 180
+}

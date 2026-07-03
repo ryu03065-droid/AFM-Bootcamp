@@ -1,0 +1,8 @@
+{
+  "name": "스팸",
+  "nameEn": "spam",
+  "quantity": 1,
+  "unit": "캔",
+  "category": "가공육",
+  "expiryDays": 365
+}

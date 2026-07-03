@@ -1,0 +1,8 @@
+{
+  "name": "감자",
+  "nameEn": "potato",
+  "quantity": 2,
+  "unit": "개",
+  "category": "채소",
+  "expiryDays": 14
+}

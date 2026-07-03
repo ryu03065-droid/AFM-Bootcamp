@@ -1,0 +1,8 @@
+{
+  "name": "버터",
+  "nameEn": "butter",
+  "quantity": 100,
+  "unit": "g",
+  "category": "유제품",
+  "expiryDays": 60
+}
