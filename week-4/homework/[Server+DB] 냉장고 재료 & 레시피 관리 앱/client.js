@@ -17,10 +17,15 @@ async function loadIngredients() {
     `).join('');
 }
 
+let _addingIngredient = false;
 async function addIngredient() {
+  if (_addingIngredient) return;
+  _addingIngredient = true;
+  setTimeout(() => { _addingIngredient = false; }, 500);
+
   const name = document.getElementById('ing-name').value.trim();
   const category = document.getElementById('ing-category').value.trim();
-  if (!name) return alert('재료 이름을 입력하세요.');
+  if (!name) { _addingIngredient = false; return alert('재료 이름을 입력하세요.'); }
   await fetch(`${API}/api/ingredients`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
