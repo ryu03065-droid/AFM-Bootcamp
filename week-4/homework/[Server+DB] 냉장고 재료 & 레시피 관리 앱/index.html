@@ -1,0 +1,520 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>냉장고 재료 &amp; 레시피 관리</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Noto+Sans+KR:wght@400;500;700;900&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --bg:        #0a0e17;
+      --bg-2:      #0f1522;
+      --panel:     #131a2a;
+      --panel-2:   #1a2436;
+      --line:      #253046;
+      --line-soft: #1c2537;
+      --txt:       #e8edf7;
+      --txt-mute:  #8595b3;
+      --txt-dim:   #5a6786;
+      /* 네온 */
+      --neon:      #00f0b5;   /* 민트 그린 네온 */
+      --neon-deep: #00c795;
+      --neon-glow: rgba(0,240,181,0.45);
+      --pink:      #ff3d7f;   /* 핫핑크 네온 */
+      --pink-glow: rgba(255,61,127,0.4);
+      --amber:     #ffb020;   /* 앰버 */
+      --violet:    #8b6cff;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: 100%; }
+    body {
+      font-family: 'Noto Sans KR', -apple-system, sans-serif;
+      color: var(--txt);
+      background:
+        radial-gradient(900px 500px at 8% -8%,  rgba(0,240,181,0.10), transparent 60%),
+        radial-gradient(800px 500px at 100% 0%, rgba(255,61,127,0.10), transparent 55%),
+        radial-gradient(700px 600px at 50% 120%, rgba(139,108,255,0.10), transparent 60%),
+        var(--bg);
+      min-height: 100vh;
+      -webkit-font-smoothing: antialiased;
+    }
+    /* 미세한 그리드 텍스처 */
+    body::before {
+      content: "";
+      position: fixed; inset: 0;
+      background-image:
+        linear-gradient(rgba(255,255,255,0.02) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255,255,255,0.02) 1px, transparent 1px);
+      background-size: 44px 44px;
+      pointer-events: none;
+      z-index: 0;
+    }
+    .wrap { position: relative; z-index: 1; }
+
+    /* ===== 헤더 ===== */
+    header {
+      position: relative;
+      max-width: 820px;
+      margin: 0 auto;
+      padding: 40px 24px 8px;
+    }
+    .brand {
+      display: flex; align-items: center; gap: 16px;
+    }
+    .logo {
+      width: 58px; height: 58px; flex-shrink: 0;
+      display: grid; place-items: center;
+      font-size: 30px;
+      border-radius: 18px;
+      background: linear-gradient(150deg, #17203300, #1c2740);
+      border: 1px solid var(--line);
+      box-shadow:
+        0 0 0 1px rgba(0,240,181,0.15) inset,
+        0 0 24px rgba(0,240,181,0.18);
+    }
+    header h1 {
+      font-family: 'Space Grotesk', 'Noto Sans KR', sans-serif;
+      font-size: 30px; font-weight: 700; line-height: 1.05;
+      letter-spacing: -0.5px;
+      color: #fff;
+    }
+    header h1 b {
+      color: var(--neon);
+      text-shadow: 0 0 18px var(--neon-glow);
+    }
+    header p {
+      font-size: 13.5px; color: var(--txt-mute); margin-top: 6px;
+      letter-spacing: 0.2px;
+    }
+    .divider {
+      max-width: 820px; margin: 22px auto 0; padding: 0 24px;
+    }
+    .divider .bar {
+      height: 1px;
+      background: linear-gradient(90deg, transparent, var(--line), transparent);
+    }
+
+    /* ===== 탭 ===== */
+    .tabs {
+      max-width: 820px;
+      margin: 24px auto 0;
+      padding: 0 24px;
+      display: flex;
+      gap: 10px;
+    }
+    .tab-btn {
+      flex: 1;
+      position: relative;
+      padding: 15px 16px;
+      border: 1px solid var(--line);
+      background: var(--panel);
+      font-family: 'Space Grotesk', 'Noto Sans KR', sans-serif;
+      font-size: 15px;
+      font-weight: 600;
+      cursor: pointer;
+      color: var(--txt-mute);
+      border-radius: 14px;
+      transition: all .2s ease;
+      overflow: hidden;
+    }
+    .tab-btn:hover { color: var(--txt); border-color: #33436b; transform: translateY(-1px); }
+    .tab-btn.active {
+      color: #061014;
+      background: linear-gradient(135deg, var(--neon), var(--neon-deep));
+      border-color: transparent;
+      box-shadow: 0 6px 22px var(--neon-glow);
+    }
+
+    .tab-content {
+      display: none;
+      max-width: 820px;
+      margin: 0 auto;
+      padding: 26px 24px 60px;
+    }
+    .tab-content.active { display: block; animation: fade .32s ease; }
+    @keyframes fade { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+
+    /* ===== 입력 카드 ===== */
+    .form-box {
+      background: linear-gradient(180deg, var(--panel-2), var(--panel));
+      border: 1px solid var(--line);
+      border-radius: 20px;
+      padding: 24px;
+      margin-bottom: 30px;
+      box-shadow: 0 20px 40px rgba(0,0,0,0.35);
+    }
+    .form-box h2 {
+      font-family: 'Space Grotesk', 'Noto Sans KR', sans-serif;
+      font-size: 17px; font-weight: 600; margin-bottom: 20px;
+      color: #fff;
+      display: flex; align-items: center; gap: 10px;
+      letter-spacing: -0.2px;
+    }
+    .form-box h2 .dot {
+      width: 8px; height: 8px; border-radius: 50%;
+      background: var(--neon);
+      box-shadow: 0 0 10px var(--neon-glow);
+    }
+    .field-label {
+      display: block;
+      font-size: 12px; font-weight: 700;
+      color: var(--txt-dim);
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      margin: 0 0 9px 2px;
+    }
+    .form-row { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 18px; }
+    .form-row:last-of-type { margin-bottom: 0; }
+    input[type="text"], .form-row input:not([type="hidden"]), .form-row textarea {
+      flex: 1;
+      min-width: 150px;
+      width: 100%;
+      padding: 13px 16px;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      font-size: 14.5px;
+      font-family: inherit;
+      background: var(--bg-2);
+      color: var(--txt);
+      outline: none;
+      transition: border-color .16s, box-shadow .16s, background .16s;
+    }
+    input::placeholder, textarea::placeholder { color: var(--txt-dim); }
+    input:focus, textarea:focus {
+      border-color: var(--neon);
+      background: #0c1320;
+      box-shadow: 0 0 0 3px rgba(0,240,181,0.14);
+    }
+    textarea { resize: vertical; min-height: 92px; line-height: 1.65; }
+
+    /* ===== 카테고리 토글 버튼 그룹 ===== */
+    .category-group {
+      display: flex; flex-wrap: wrap; gap: 9px;
+    }
+    .cat-btn {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 10px 15px;
+      border: 1px solid var(--line);
+      background: var(--bg-2);
+      color: var(--txt-mute);
+      border-radius: 999px;
+      font-size: 13.5px;
+      font-family: inherit;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all .16s ease;
+      user-select: none;
+    }
+    .cat-btn:hover {
+      color: var(--txt);
+      border-color: #37477199;
+      transform: translateY(-1px);
+    }
+    .cat-btn.active {
+      color: #061014;
+      background: linear-gradient(135deg, var(--neon), var(--neon-deep));
+      border-color: transparent;
+      box-shadow: 0 4px 16px var(--neon-glow);
+    }
+
+    .btn-add {
+      width: 100%;
+      margin-top: 22px;
+      background: linear-gradient(135deg, var(--pink), #ff5c93);
+      color: #fff;
+      border: none;
+      padding: 15px 20px;
+      border-radius: 13px;
+      font-size: 15px;
+      font-family: 'Space Grotesk', 'Noto Sans KR', sans-serif;
+      font-weight: 700;
+      letter-spacing: 0.3px;
+      cursor: pointer;
+      box-shadow: 0 8px 24px var(--pink-glow);
+      transition: transform .12s, box-shadow .12s, filter .12s;
+    }
+    .btn-add:hover { filter: brightness(1.06); box-shadow: 0 10px 30px var(--pink-glow); transform: translateY(-1px); }
+    .btn-add:active { transform: translateY(1px); }
+
+    .section-title {
+      font-family: 'Space Grotesk', 'Noto Sans KR', sans-serif;
+      font-size: 15px; font-weight: 600; color: var(--txt);
+      margin-bottom: 16px;
+      display: flex; align-items: center; gap: 10px;
+      letter-spacing: 0.2px;
+    }
+    .section-title .count {
+      font-size: 12px; font-weight: 700;
+      color: var(--neon);
+      background: rgba(0,240,181,0.10);
+      border: 1px solid rgba(0,240,181,0.25);
+      padding: 2px 9px;
+      border-radius: 999px;
+    }
+
+    /* ===== 재료 태그 영역 ===== */
+    .tag-area {
+      background:
+        radial-gradient(600px 200px at 50% 0%, rgba(139,108,255,0.06), transparent 70%),
+        var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 20px;
+      padding: 22px;
+      min-height: 130px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 11px;
+      align-content: flex-start;
+    }
+    .tag {
+      display: inline-flex;
+      align-items: center;
+      gap: 9px;
+      background: var(--bg-2);
+      color: var(--txt);
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      padding: 9px 11px 9px 15px;
+      font-size: 14px;
+      font-weight: 600;
+      transition: transform .14s, border-color .14s, box-shadow .14s;
+    }
+    .tag:hover {
+      transform: translateY(-2px);
+      border-color: rgba(0,240,181,0.5);
+      box-shadow: 0 6px 18px rgba(0,240,181,0.14);
+    }
+    /* 카테고리 배지 */
+    .tag em {
+      font-style: normal;
+      font-size: 11px;
+      font-weight: 700;
+      background: rgba(139,108,255,0.16);
+      color: #b3a3ff;
+      border: 1px solid rgba(139,108,255,0.3);
+      padding: 2px 9px;
+      border-radius: 999px;
+      letter-spacing: 0.2px;
+    }
+    .tag button {
+      background: #202b41;
+      border: none;
+      color: var(--txt-dim);
+      width: 22px; height: 22px;
+      border-radius: 50%;
+      font-size: 15px;
+      cursor: pointer;
+      line-height: 1;
+      display: grid; place-items: center;
+      transition: background .14s, color .14s, transform .14s;
+    }
+    .tag button:hover { background: var(--pink); color: #fff; transform: rotate(90deg); }
+
+    /* ===== 레시피 카드 ===== */
+    .card {
+      position: relative;
+      background: linear-gradient(180deg, var(--panel-2), var(--panel));
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      padding: 20px 20px 20px 22px;
+      margin-bottom: 16px;
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 16px;
+      overflow: hidden;
+      transition: transform .14s, box-shadow .14s, border-color .14s;
+    }
+    /* 왼쪽 네온 엣지 */
+    .card::before {
+      content: "";
+      position: absolute; left: 0; top: 0; bottom: 0;
+      width: 4px;
+      background: linear-gradient(180deg, var(--neon), var(--violet));
+      box-shadow: 0 0 16px var(--neon-glow);
+    }
+    .card:hover {
+      transform: translateY(-3px);
+      border-color: #33436b;
+      box-shadow: 0 16px 34px rgba(0,0,0,0.4);
+    }
+    .card-info { flex: 1; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+    .name {
+      font-family: 'Space Grotesk', 'Noto Sans KR', sans-serif;
+      font-size: 19px; font-weight: 700; color: #fff;
+      letter-spacing: -0.2px;
+    }
+    .meta {
+      font-size: 12.5px; color: var(--neon); font-weight: 600;
+      background: rgba(0,240,181,0.08);
+      border: 1px solid rgba(0,240,181,0.22);
+      border-radius: 9px;
+      padding: 7px 11px;
+      display: inline-block;
+      width: fit-content;
+      max-width: 100%;
+      word-break: break-word;
+    }
+    .steps {
+      font-size: 13.5px; color: var(--txt-mute); line-height: 1.95;
+      margin-top: 2px;
+      border-top: 1px dashed var(--line);
+      padding-top: 12px;
+    }
+
+    .btn-delete {
+      background: transparent;
+      color: var(--txt-dim);
+      border: 1px solid var(--line);
+      padding: 8px 14px;
+      border-radius: 10px;
+      font-size: 13px;
+      font-family: inherit;
+      font-weight: 700;
+      cursor: pointer;
+      flex-shrink: 0;
+      transition: all .14s;
+    }
+    .btn-delete:hover { background: rgba(255,61,127,0.12); color: var(--pink); border-color: var(--pink); }
+
+    .empty {
+      color: var(--txt-dim);
+      font-size: 14px;
+      text-align: center;
+      padding: 38px 0;
+      width: 100%;
+    }
+
+    @media (max-width: 560px) {
+      header { padding-top: 30px; }
+      header h1 { font-size: 25px; }
+      .logo { width: 50px; height: 50px; font-size: 26px; }
+      .tab-btn { font-size: 14px; padding: 13px 8px; }
+      .card { flex-direction: column; }
+      .btn-delete { align-self: flex-end; }
+    }
+  </style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <div class="brand">
+      <div class="logo">🧊</div>
+      <div>
+        <h1>냉장고 <b>재료</b> &amp; 레시피</h1>
+        <p>냉장고 속 재료를 관리하고, 나만의 레시피를 기록하세요.</p>
+      </div>
+    </div>
+  </header>
+  <div class="divider"><div class="bar"></div></div>
+
+  <div class="tabs">
+    <button class="tab-btn active" data-tab="ingredients" onclick="showTab('ingredients')">🥦 냉장고 재료</button>
+    <button class="tab-btn" data-tab="recipes" onclick="showTab('recipes')">📖 레시피</button>
+  </div>
+
+  <!-- 재료 탭 -->
+  <div class="tab-content active" id="tab-ingredients">
+    <div class="form-box">
+      <h2><span class="dot"></span> 재료 등록</h2>
+
+      <div class="form-row">
+        <div style="flex:1; min-width:150px;">
+          <label class="field-label" for="ing-name">재료 이름</label>
+          <input type="text" id="ing-name" placeholder="예: 달걀, 김치, 대파 (엔터로 추가)" />
+        </div>
+      </div>
+
+      <div>
+        <label class="field-label">카테고리</label>
+        <!-- client.js 가 값을 읽는 hidden input -->
+        <input type="hidden" id="ing-category" value="" />
+        <!-- 보이는 토글 버튼 그룹 -->
+        <div class="category-group">
+          <button type="button" class="cat-btn" onclick="selectCategory(this, '단백질')">🥩 단백질</button>
+          <button type="button" class="cat-btn" onclick="selectCategory(this, '채소')">🥦 채소</button>
+          <button type="button" class="cat-btn" onclick="selectCategory(this, '탄수화물')">🍚 탄수화물</button>
+          <button type="button" class="cat-btn" onclick="selectCategory(this, '유제품')">🧀 유제품</button>
+          <button type="button" class="cat-btn" onclick="selectCategory(this, '양념/소스')">🧂 양념/소스</button>
+          <button type="button" class="cat-btn" onclick="selectCategory(this, '기타')">🫙 기타</button>
+        </div>
+      </div>
+
+      <button type="button" class="btn-add" onclick="addIngredient()">＋ 냉장고에 넣기</button>
+    </div>
+
+    <div class="section-title">🧊 냉장고 재료 목록</div>
+    <div class="tag-area" id="ingredient-list">
+      <p class="empty">불러오는 중...</p>
+    </div>
+  </div>
+
+  <!-- 레시피 탭 -->
+  <div class="tab-content" id="tab-recipes">
+    <div class="form-box">
+      <h2><span class="dot"></span> 레시피 작성</h2>
+
+      <div class="form-row">
+        <div style="flex:1; min-width:150px;">
+          <label class="field-label" for="rec-title">요리 이름</label>
+          <input type="text" id="rec-title" placeholder="예: 김치볶음밥" />
+        </div>
+      </div>
+
+      <div class="form-row">
+        <div style="flex:1; min-width:150px;">
+          <label class="field-label" for="rec-ingredients">재료</label>
+          <textarea id="rec-ingredients" placeholder="예: 달걀 2개, 김치 100g, 밥 1공기"></textarea>
+        </div>
+      </div>
+
+      <div class="form-row">
+        <div style="flex:1; min-width:150px;">
+          <label class="field-label" for="rec-steps">조리법</label>
+          <textarea id="rec-steps" placeholder="예:&#10;1. 팬에 기름을 두르고&#10;2. 달걀을 깨서 넣고&#10;3. 김치를 넣어 볶는다"></textarea>
+        </div>
+      </div>
+
+      <button type="button" class="btn-add" onclick="addRecipe()">＋ 레시피북에 저장</button>
+    </div>
+
+    <div class="section-title">📖 저장된 레시피</div>
+    <div id="recipe-list"></div>
+  </div>
+
+</div>
+
+<script>
+  // 카테고리 토글 (client.js 아님 — index.html 전용)
+  function selectCategory(el, value) {
+    const hidden = document.getElementById('ing-category');
+    // 이미 선택된 걸 다시 누르면 해제
+    if (el.classList.contains('active')) {
+      el.classList.remove('active');
+      hidden.value = '';
+      return;
+    }
+    document.querySelectorAll('.cat-btn').forEach(b => b.classList.remove('active'));
+    el.classList.add('active');
+    hidden.value = value;
+  }
+
+  // 재료 추가 후 카테고리 선택 상태도 초기화 (addIngredient 는 hidden input 만 비움)
+  document.addEventListener('click', (e) => {
+    const btn = e.target.closest('.btn-add');
+    if (btn && btn.getAttribute('onclick') === 'addIngredient()') {
+      // addIngredient 실행 직후 hidden value 가 비워지므로 버튼 활성도 동기화
+      setTimeout(() => {
+        if (!document.getElementById('ing-category').value) {
+          document.querySelectorAll('.cat-btn').forEach(b => b.classList.remove('active'));
+        }
+      }, 0);
+    }
+  });
+</script>
+<script src="client.js"></script>
+</body>
+</html>
