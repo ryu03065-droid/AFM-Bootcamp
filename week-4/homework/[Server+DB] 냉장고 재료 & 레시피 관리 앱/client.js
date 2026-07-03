@@ -93,5 +93,57 @@ function showTab(tab) {
   document.querySelector(`[data-tab="${tab}"]`).classList.add('active');
 }
 
+// ── AI 레시피 생성 ────────────────────────────────────
+
+let aiGeneratedRecipe = null;
+
+async function generateRecipe() {
+  const btn = document.getElementById('ai-gen-btn');
+  const preview = document.getElementById('ai-preview');
+  const style = document.getElementById('ai-style').value;
+
+  btn.textContent = '⏳ AI가 레시피를 만들고 있어요...';
+  btn.disabled = true;
+  preview.style.display = 'none';
+
+  try {
+    const res = await fetch('/api/recipes/generate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ style }),
+    });
+    const data = await res.json();
+    if (!res.ok) { alert(data.error || 'AI 생성 실패'); return; }
+
+    aiGeneratedRecipe = data;
+    document.getElementById('ai-title').textContent = '🍳 ' + data.title;
+    document.getElementById('ai-ingredients-text').textContent = '재료: ' + data.ingredients;
+    document.getElementById('ai-steps-text').innerHTML = data.steps.replace(/\n/g, '<br>');
+    document.getElementById('ai-time').textContent = '⏱ ' + (data.time || '?');
+    document.getElementById('ai-difficulty').textContent = '📊 ' + (data.difficulty || '?');
+    preview.style.display = 'block';
+  } catch (e) {
+    alert('오류: ' + e.message);
+  } finally {
+    btn.textContent = '🤖 AI 레시피 생성하기';
+    btn.disabled = false;
+  }
+}
+
+async function saveAiRecipe() {
+  if (!aiGeneratedRecipe) return;
+  const { title, ingredients, steps, time, difficulty } = aiGeneratedRecipe;
+  const stepsWithMeta = steps + (time || difficulty ? `\n\n⏱ ${time || ''}  📊 ${difficulty || ''}` : '');
+  await fetch('/api/recipes', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ title, ingredients, steps: stepsWithMeta }),
+  });
+  document.getElementById('ai-preview').style.display = 'none';
+  aiGeneratedRecipe = null;
+  alert('레시피가 저장됐어요! 🎉');
+  loadRecipes();
+}
+
 loadIngredients();
 loadRecipes();
