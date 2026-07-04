@@ -1,0 +1,15 @@
+{
+  "name": "weather-today",
+  "version": "2.0.0",
+  "description": "오늘의 날씨 (배경 애니메이션 + 즐겨찾기 DB)",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "dotenv": "^16.0.0",
+    "express": "^4.18.0",
+    "pg": "^8.22.0"
+  }
+}

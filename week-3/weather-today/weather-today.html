@@ -10,6 +10,7 @@
   <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" crossorigin></script>
   <script src="https://unpkg.com/@babel/standalone@7.25.9/babel.min.js"></script>
   <style>
+    html, body { margin: 0; }
     /* 가로 스크롤 영역 스크롤바 숨김 (Tailwind 미지원) */
     .no-scrollbar::-webkit-scrollbar { display: none; }
     .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
@@ -18,37 +19,30 @@
       50% { transform: translateY(-10px); }
     }
     .animate-floaty { animation: floaty 4s ease-in-out infinite; }
+    @keyframes pop-star {
+      0% { transform: scale(0.6); }
+      55% { transform: scale(1.35); }
+      100% { transform: scale(1); }
+    }
+    .animate-pop-star { display: inline-block; animation: pop-star 0.35s cubic-bezier(0.34, 1.56, 0.64, 1); }
+    #weather-canvas { position: fixed; inset: 0; width: 100%; height: 100%; z-index: 0; pointer-events: none; }
   </style>
 </head>
 <body>
   <div id="root"></div>
   <script type="text/babel">
-    const { useState, useEffect, useCallback } = React;
+    const { useState, useEffect, useCallback, useRef } = React;
 
     // ========================================
-    // 🌐 API 설정 & 데이터 fetch 로직
+    // 🌐 자체 서버 API 호출 (OpenWeatherMap 키는 서버에만 존재)
     // ========================================
-    const API_KEY = "1d5926b624ef458b103acdefc47d5cbc";
-    const API_BASE = "https://api.openweathermap.org/data/2.5";
-    const GEO_BASE = "https://api.openweathermap.org/geo/1.0";
     const DEFAULT_LOCATION = { lat: 37.5665, lon: 126.9780 }; // 서울
 
-    // 도시명 → 위/경도 후보 검색 (OpenWeatherMap Geocoding API)
+    // 도시명 → 위/경도 후보 검색
     const geocodeCity = async (query) => {
-      const res = await fetch(
-        `${GEO_BASE}/direct?q=${encodeURIComponent(query)}&limit=5&appid=${API_KEY}`
-      );
-      if (!res.ok) throw new Error("도시 검색에 실패했습니다.");
-      const json = await res.json();
-      return json.map((c) => ({
-        name: c.name,
-        // 한국어 이름이 있으면 우선 노출
-        localName: (c.local_names && c.local_names.ko) || c.name,
-        state: c.state || "",
-        country: c.country || "",
-        lat: c.lat,
-        lon: c.lon,
-      }));
+      const res = await fetch(`/api/geocode?q=${encodeURIComponent(query)}`);
+      if (!res.ok) throw new Error((await res.json().catch(() => null))?.error || "도시 검색에 실패했습니다.");
+      return res.json();
     };
 
     // OpenWeatherMap weather[0].main → 기존 THEME 키 매핑
@@ -64,7 +58,6 @@
           return "rainy";
         case "Snow":
           return "snowy";
-        // Mist/Smoke/Haze/Fog/Dust/Sand/Ash/Squall/Tornado 등 → 가장 비슷한 cloudy 로 폴백
         default:
           return "cloudy";
       }
@@ -84,21 +77,7 @@
         );
       });
 
-    // UV 지수 (무료 플랜 제한 → 실패 시 null)
-    const fetchUv = async (lat, lon) => {
-      try {
-        const res = await fetch(`${API_BASE}/uvi?lat=${lat}&lon=${lon}&appid=${API_KEY}`);
-        if (!res.ok) return null;
-        const json = await res.json();
-        return typeof json.value === "number" ? Math.round(json.value) : null;
-      } catch {
-        return null;
-      }
-    };
-
     // 한국시간(KST, Asia/Seoul) 기준 날짜 구성요소 추출
-    // Date.prototype.getMonth()/getDate()/getHours()/getDay() 는 브라우저 로컬 타임존을
-    // 쓰므로 직접 쓰지 않고, Intl.DateTimeFormat 으로 KST 기준 값을 뽑아낸다.
     const KST = "Asia/Seoul";
     const KST_WEEKDAY_TO_IDX = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
     const getKstParts = (date) => {
@@ -115,25 +94,22 @@
       parts.forEach((p) => {
         m[p.type] = p.value;
       });
-      // hour 가 "24"로 나오는 환경(en-CA 자정) 보정
       let hour = parseInt(m.hour, 10);
       if (hour === 24) hour = 0;
       return {
         year: parseInt(m.year, 10),
-        month: parseInt(m.month, 10), // 1~12
+        month: parseInt(m.month, 10),
         day: parseInt(m.day, 10),
         hour,
-        weekday: KST_WEEKDAY_TO_IDX[m.weekday], // 0(일)~6(토)
+        weekday: KST_WEEKDAY_TO_IDX[m.weekday],
       };
     };
 
-    // KST 기준 "YYYY-M-D" 키 (날짜 그룹핑/비교용)
     const getKstDayKey = (date) => {
       const p = getKstParts(date);
       return `${p.year}-${p.month}-${p.day}`;
     };
 
-    // 시간 라벨 (예: 15시) — KST 기준
     const hourLabel = (dt) => `${getKstParts(new Date(dt * 1000)).hour}시`;
 
     // forecast list → 일별 그룹핑 후 5일치 최고/최저 계산
@@ -141,7 +117,7 @@
       const byDay = {};
       list.forEach((item) => {
         const d = new Date(item.dt * 1000);
-        const key = getKstDayKey(d); // KST 기준 날짜로 그룹핑
+        const key = getKstDayKey(d);
         if (!byDay[key]) {
           byDay[key] = { weekday: getKstParts(d).weekday, temps: [], conditions: {} };
         }
@@ -150,12 +126,11 @@
         byDay[key].conditions[cond] = (byDay[key].conditions[cond] || 0) + 1;
       });
 
-      const todayKey = getKstDayKey(new Date()); // KST 기준 오늘
+      const todayKey = getKstDayKey(new Date());
 
       return Object.entries(byDay)
         .slice(0, 5)
-        .map(([key, v], idx) => {
-          // 그 날 가장 빈번한 상태
+        .map(([key, v]) => {
           const condition = Object.entries(v.conditions).sort((a, b) => b[1] - a[1])[0][0];
           let day;
           if (key === todayKey) day = "오늘";
@@ -169,21 +144,17 @@
         });
     };
 
-    // 현재 날씨 + 예보 통합 fetch
-    const fetchWeather = async (lat, lon) => {
-      const [curRes, fcRes] = await Promise.all([
-        fetch(`${API_BASE}/weather?lat=${lat}&lon=${lon}&appid=${API_KEY}&units=metric&lang=kr`),
-        fetch(`${API_BASE}/forecast?lat=${lat}&lon=${lon}&appid=${API_KEY}&units=metric&lang=kr`),
-      ]);
-
-      if (!curRes.ok || !fcRes.ok) {
-        throw new Error("날씨 데이터를 불러오지 못했습니다.");
+    // 현재 날씨 + 예보 통합 fetch (서버가 OpenWeatherMap 호출을 대신 수행)
+    // displayName: 검색으로 이미 알고 있는 한글 지명(동/구 단위)이 있으면 그대로 사용.
+    // reverse geocoding(cityLocalName)은 도시 단위로만 매칭되어 "현재 위치"처럼
+    // 이름을 모를 때의 폴백으로만 써야 함 (동 단위로는 항상 "서울"만 반환됨).
+    const fetchWeather = async (lat, lon, displayName) => {
+      const res = await fetch(`/api/weather?lat=${lat}&lon=${lon}`);
+      if (!res.ok) {
+        const body = await res.json().catch(() => null);
+        throw new Error(body?.error || "날씨 데이터를 불러오지 못했습니다.");
       }
-
-      const cur = await curRes.json();
-      const fc = await fcRes.json();
-      const uvIndex = await fetchUv(lat, lon);
-
+      const { current: cur, forecast: fc, uvIndex, cityLocalName } = await res.json();
       const condition = conditionToTheme(cur.weather[0].main);
 
       const hourly = fc.list.slice(0, 8).map((item, i) => ({
@@ -193,7 +164,10 @@
       }));
 
       return {
-        city: cur.name,
+        city: displayName || cityLocalName || cur.name,
+        country: cur.sys?.country || "",
+        lat: cur.coord?.lat ?? lat,
+        lon: cur.coord?.lon ?? lon,
         date: new Date(),
         condition,
         conditionLabel: cur.weather[0].description || THEME[condition].label,
@@ -203,10 +177,31 @@
         tempMin: Math.round(cur.main.temp_min),
         humidity: cur.main.humidity,
         windSpeed: Math.round(cur.wind.speed * 10) / 10,
-        uvIndex, // null 가능
+        uvIndex,
         hourly,
         weekly: buildWeekly(fc.list),
       };
+    };
+
+    // ── 즐겨찾기 API ──────────────────────────────────────
+    const listFavorites = async () => {
+      const res = await fetch("/api/favorites");
+      if (!res.ok) return [];
+      return res.json();
+    };
+
+    const addFavorite = async (payload) => {
+      const res = await fetch("/api/favorites", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok) throw new Error("즐겨찾기 추가에 실패했습니다.");
+      return res.json();
+    };
+
+    const removeFavorite = async (id) => {
+      await fetch(`/api/favorites/${id}`, { method: "DELETE" });
     };
 
     // 날씨 상태별 테마 (이모지 + 배경 그라데이션 + 텍스트 톤)
@@ -226,7 +221,7 @@
       rainy: {
         emoji: "🌧️",
         label: "비",
-        bg: "from-slate-600 via-blue-800 to-slate-900",
+        bg: "from-slate-700 via-blue-900 to-slate-950",
         accent: "text-blue-100",
       },
       snowy: {
@@ -238,7 +233,6 @@
     };
 
     const WEEKDAYS = ["일", "월", "화", "수", "목", "금", "토"];
-    // 헤더 날짜 표시 — KST 기준 (예: "6월 20일 (토)")
     const formatDate = (d) => {
       const p = getKstParts(d);
       return `${p.month}월 ${p.day}일 (${WEEKDAYS[p.weekday]})`;
@@ -251,6 +245,172 @@
       if (v <= 10) return "매우 높음";
       return "위험";
     };
+
+    // ========================================
+    // 🎨 배경 애니메이션 (날씨 상태별 캔버스 파티클)
+    // ========================================
+    function WeatherBackground({ condition }) {
+      const canvasRef = useRef(null);
+
+      useEffect(() => {
+        const canvas = canvasRef.current;
+        const ctx = canvas.getContext("2d");
+        const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+        let width, height;
+        const resize = () => {
+          width = canvas.width = window.innerWidth;
+          height = canvas.height = window.innerHeight;
+        };
+        resize();
+        window.addEventListener("resize", resize);
+
+        const rand = (min, max) => min + Math.random() * (max - min);
+
+        let particles = [];
+        const COUNT = { rainy: 140, snowy: 90, cloudy: 16, sunny: 26 }[condition] || 0;
+
+        if (condition === "rainy") {
+          particles = Array.from({ length: COUNT }, () => ({
+            x: rand(0, width),
+            y: rand(0, height),
+            len: rand(10, 22),
+            speed: rand(9, 16),
+            opacity: rand(0.15, 0.4),
+          }));
+        } else if (condition === "snowy") {
+          particles = Array.from({ length: COUNT }, () => ({
+            x: rand(0, width),
+            y: rand(0, height),
+            r: rand(1.5, 4),
+            speed: rand(0.6, 1.8),
+            drift: rand(0.3, 1.2),
+            phase: rand(0, Math.PI * 2),
+          }));
+        } else if (condition === "cloudy") {
+          // 뒤(작고 느림) → 앞(크고 빠름) 2겹 패럴랙스 레이어
+          particles = Array.from({ length: COUNT }, (_, i) => {
+            const layer = i % 2; // 0: 배경, 1: 전경
+            const scale = layer === 0 ? rand(0.5, 0.9) : rand(1, 1.8);
+            return {
+              x: rand(-100, width + 100),
+              y: rand(height * 0.04, height * 0.38),
+              scale,
+              speed: (layer === 0 ? rand(0.08, 0.18) : rand(0.25, 0.5)),
+              opacity: layer === 0 ? rand(0.08, 0.14) : rand(0.14, 0.22),
+              puffs: Array.from({ length: 5 + Math.floor(rand(0, 3)) }, () => ({
+                dx: rand(-55, 55),
+                dy: rand(-14, 10),
+                r: rand(18, 34),
+              })),
+            };
+          }).sort((a, b) => a.scale - b.scale);
+        } else if (condition === "sunny") {
+          particles = Array.from({ length: COUNT }, () => ({
+            x: rand(0, width),
+            y: rand(0, height),
+            r: rand(1, 2.5),
+            speed: rand(0.2, 0.6),
+            phase: rand(0, Math.PI * 2),
+          }));
+        }
+
+        // 여러 개의 부드러운 원을 겹쳐 뭉게구름 실루엣을 그린다 (그라디언트로 경계 흐림 처리)
+        const drawCloud = (x, y, scale, opacity, puffs) => {
+          ctx.save();
+          ctx.translate(x, y);
+          ctx.scale(scale, scale);
+          puffs.forEach(({ dx, dy, r }) => {
+            const grad = ctx.createRadialGradient(dx, dy, 0, dx, dy, r);
+            grad.addColorStop(0, `rgba(255,255,255,${opacity})`);
+            grad.addColorStop(1, "rgba(255,255,255,0)");
+            ctx.fillStyle = grad;
+            ctx.beginPath();
+            ctx.arc(dx, dy, r, 0, Math.PI * 2);
+            ctx.fill();
+          });
+          ctx.restore();
+        };
+
+        let raf;
+        const draw = () => {
+          ctx.clearRect(0, 0, width, height);
+
+          if (condition === "rainy") {
+            ctx.strokeStyle = "rgba(200,220,255,0.5)";
+            ctx.lineWidth = 1.2;
+            particles.forEach((p) => {
+              ctx.globalAlpha = p.opacity;
+              ctx.beginPath();
+              ctx.moveTo(p.x, p.y);
+              ctx.lineTo(p.x - 2, p.y + p.len);
+              ctx.stroke();
+              p.y += p.speed;
+              p.x -= 0.6;
+              if (p.y > height) {
+                p.y = -p.len;
+                p.x = rand(0, width);
+              }
+            });
+            ctx.globalAlpha = 1;
+          } else if (condition === "snowy") {
+            ctx.fillStyle = "rgba(255,255,255,0.85)";
+            particles.forEach((p) => {
+              p.phase += 0.02;
+              p.y += p.speed;
+              p.x += Math.sin(p.phase) * p.drift * 0.3;
+              if (p.y > height) {
+                p.y = -p.r;
+                p.x = rand(0, width);
+              }
+              ctx.globalAlpha = rand(0.5, 1);
+              ctx.beginPath();
+              ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+              ctx.fill();
+            });
+            ctx.globalAlpha = 1;
+          } else if (condition === "cloudy") {
+            particles.forEach((p) => {
+              drawCloud(p.x, p.y, p.scale, p.opacity, p.puffs);
+              p.x += p.speed;
+              const edge = 100 * p.scale;
+              if (p.x - edge > width) p.x = -edge;
+            });
+          } else if (condition === "sunny") {
+            ctx.fillStyle = "rgba(255,250,210,0.8)";
+            particles.forEach((p) => {
+              p.phase += 0.015;
+              p.y -= p.speed;
+              p.x += Math.sin(p.phase) * 0.3;
+              if (p.y < -10) {
+                p.y = height + 10;
+                p.x = rand(0, width);
+              }
+              ctx.globalAlpha = (Math.sin(p.phase) + 1) / 2 * 0.6 + 0.2;
+              ctx.beginPath();
+              ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+              ctx.fill();
+            });
+            ctx.globalAlpha = 1;
+          }
+
+          if (!reduceMotion) raf = requestAnimationFrame(draw);
+        };
+
+        if (reduceMotion) {
+          draw();
+        } else {
+          raf = requestAnimationFrame(draw);
+        }
+
+        return () => {
+          window.removeEventListener("resize", resize);
+          if (raf) cancelAnimationFrame(raf);
+        };
+      }, [condition]);
+
+      return <canvas id="weather-canvas" ref={canvasRef} aria-hidden="true" />;
+    }
 
     // ========================================
     // 🎨 Design System Components
@@ -277,12 +437,88 @@
     }
 
     // ========================================
+    // ⭐ 즐겨찾기 패널 (드롭다운 리스트)
+    // ========================================
+    function FavoritesPanel({ favorites, currentLoc, onSelect, onRemove }) {
+      const [open, setOpen] = useState(false);
+
+      return (
+        <div>
+          <button
+            type="button"
+            onClick={() => setOpen((v) => !v)}
+            className="flex items-center gap-1.5 rounded-full bg-white/15 backdrop-blur-md ring-1 ring-white/20 hover:bg-white/25 px-3.5 py-2 text-xs font-semibold transition"
+          >
+            <span aria-hidden="true">⭐</span>
+            <span>즐겨찾기{favorites.length > 0 ? ` ${favorites.length}` : ""}</span>
+            <span className={`transition-transform ${open ? "rotate-180" : ""}`} aria-hidden="true">▾</span>
+          </button>
+
+          {open && (
+            <GlassCard className="mt-2 divide-y divide-white/10 !p-0 overflow-hidden">
+              {favorites.length === 0 ? (
+                <p className="px-4 py-3 text-sm text-white/70">
+                  ☆ 버튼을 눌러 자주 보는 도시를 즐겨찾기에 추가해보세요.
+                </p>
+              ) : (
+                favorites.map((f) => {
+                  const active = currentLoc && f.lat === currentLoc.lat && f.lon === currentLoc.lon;
+                  return (
+                    <div
+                      key={f.id}
+                      onClick={() => {
+                        onSelect({ lat: f.lat, lon: f.lon, localName: f.local_name || f.city_name });
+                        setOpen(false);
+                      }}
+                      className={`flex items-center justify-between gap-2 px-4 py-3 cursor-pointer transition ${
+                        active ? "bg-white/15" : "hover:bg-white/10"
+                      }`}
+                    >
+                      <span className="text-sm font-medium flex items-center gap-1.5">
+                        📍 {f.local_name || f.city_name}
+                        {active && <span className="text-xs text-white/60">현재</span>}
+                      </span>
+                      <button
+                        type="button"
+                        aria-label="즐겨찾기 삭제"
+                        title="즐겨찾기 삭제"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onRemove(f.id);
+                        }}
+                        className="text-white/50 hover:text-white text-sm px-1"
+                      >
+                        🗑
+                      </button>
+                    </div>
+                  );
+                })
+              )}
+            </GlassCard>
+          )}
+        </div>
+      );
+    }
+
+    // ========================================
     // 🧩 섹션 컴포넌트
     // ========================================
-    function CurrentWeather({ data, theme }) {
+    function CurrentWeather({ data, theme, isFavorite, onToggleFavorite }) {
       return (
-        <header className="text-center pt-8 pb-6">
-          <h1 className="text-xl font-medium">{data.city}</h1>
+        <header className="text-center pt-4 pb-6">
+          <div className="flex items-center justify-center gap-1.5">
+            <h1 className="text-xl font-medium">{data.city}</h1>
+            <button
+              onClick={onToggleFavorite}
+              aria-label={isFavorite ? "즐겨찾기 해제" : "즐겨찾기 추가"}
+              title={isFavorite ? "즐겨찾기 해제" : "즐겨찾기 추가"}
+              className="text-xl leading-none translate-y-[1px]"
+            >
+              <span key={isFavorite ? "on" : "off"} className={isFavorite ? "animate-pop-star" : ""}>
+                {isFavorite ? "★" : "☆"}
+              </span>
+            </button>
+          </div>
           <p className="text-sm text-white/70 mt-0.5">{formatDate(data.date)}</p>
 
           <div className="text-7xl my-4 animate-floaty" aria-hidden="true">
@@ -389,7 +625,7 @@
     // ========================================
     function SearchBar({ onSelectCity, onUseCurrentLocation }) {
       const [query, setQuery] = useState("");
-      const [results, setResults] = useState(null); // null=미검색, []=결과없음
+      const [results, setResults] = useState(null);
       const [searching, setSearching] = useState(false);
       const [searchError, setSearchError] = useState(null);
 
@@ -403,7 +639,6 @@
         try {
           const candidates = await geocodeCity(q);
           if (candidates.length === 1) {
-            // 결과 1개면 바로 선택
             onSelectCity(candidates[0]);
             setQuery("");
             setResults(null);
@@ -430,7 +665,7 @@
           .join(", ");
 
       return (
-        <div className="pt-6">
+        <div>
           <form onSubmit={handleSearch} className="flex gap-2">
             <div className="relative flex-1">
               <span className="absolute left-3 top-1/2 -translate-y-1/2 text-white/60 text-sm" aria-hidden="true">🔍</span>
@@ -461,7 +696,6 @@
             </button>
           </form>
 
-          {/* 검색 상태 표시 */}
           {searchError && (
             <p className="mt-2 px-1 text-sm text-white/80">{searchError}</p>
           )}
@@ -491,17 +725,27 @@
     // ========================================
     function App() {
       const [data, setData] = useState(null);
+      const [currentLoc, setCurrentLoc] = useState(null);
       const [loading, setLoading] = useState(true);
       const [error, setError] = useState(null);
+      const [favorites, setFavorites] = useState([]);
 
-      // lat/lon이 주어지면 해당 위치, 없으면 현재 위치(geolocation) 날씨 로드
+      const refreshFavorites = useCallback(() => {
+        listFavorites().then(setFavorites).catch(() => {});
+      }, []);
+
+      useEffect(() => {
+        refreshFavorites();
+      }, [refreshFavorites]);
+
       const loadWeather = useCallback(async (loc) => {
         setLoading(true);
         setError(null);
         try {
-          const { lat, lon } = loc || (await getCurrentPosition());
-          const weather = await fetchWeather(lat, lon);
+          const target = loc || (await getCurrentPosition());
+          const weather = await fetchWeather(target.lat, target.lon, target.displayName);
           setData(weather);
+          setCurrentLoc({ lat: target.lat, lon: target.lon });
         } catch (e) {
           setError(e.message || "알 수 없는 오류가 발생했습니다.");
         } finally {
@@ -509,12 +753,10 @@
         }
       }, []);
 
-      // 현재 위치 기반 재로드 (재시도/현재 위치 버튼용)
       const loadCurrent = useCallback(() => loadWeather(null), [loadWeather]);
 
-      // 검색 결과 도시 선택 → 해당 좌표로 갱신
       const handleSelectCity = useCallback(
-        (city) => loadWeather({ lat: city.lat, lon: city.lon }),
+        (city) => loadWeather({ lat: city.lat, lon: city.lon, displayName: city.localName }),
         [loadWeather]
       );
 
@@ -522,18 +764,80 @@
         loadCurrent();
       }, [loadCurrent]);
 
+      const isFavorite =
+        data && currentLoc && favorites.some((f) => f.lat === currentLoc.lat && f.lon === currentLoc.lon);
+
+      const handleToggleFavorite = async () => {
+        if (!data || !currentLoc) return;
+        if (isFavorite) {
+          const fav = favorites.find((f) => f.lat === currentLoc.lat && f.lon === currentLoc.lon);
+          if (fav) {
+            // 서버 응답을 기다리지 않고 별을 바로 비운 뒤(낙관적 업데이트) 실제 삭제 요청
+            setFavorites((prev) => prev.filter((f) => f.id !== fav.id));
+            try {
+              await removeFavorite(fav.id);
+            } finally {
+              refreshFavorites();
+            }
+          }
+        } else {
+          // 서버 응답을 기다리지 않고 별을 바로 채운 뒤(낙관적 업데이트) 실제 추가 요청
+          const optimisticFav = {
+            id: `optimistic-${currentLoc.lat}-${currentLoc.lon}`,
+            city_name: data.city,
+            local_name: data.city,
+            country: data.country,
+            lat: currentLoc.lat,
+            lon: currentLoc.lon,
+          };
+          setFavorites((prev) => [...prev, optimisticFav]);
+          try {
+            await addFavorite({
+              cityName: data.city,
+              localName: data.city,
+              country: data.country,
+              lat: currentLoc.lat,
+              lon: currentLoc.lon,
+            });
+          } catch (e) {
+            // 즐겨찾기 추가 실패는 조용히 무시 (UX상 치명적이지 않음)
+          } finally {
+            refreshFavorites();
+          }
+        }
+      };
+
+      const handleRemoveFavorite = async (id) => {
+        await removeFavorite(id);
+        refreshFavorites();
+      };
+
       if (loading) return <LoadingScreen />;
       if (error || !data) return <ErrorScreen message={error || "데이터가 없습니다."} onRetry={loadCurrent} />;
 
       const theme = THEME[data.condition];
 
       return (
-        <div className={`min-h-screen w-full bg-gradient-to-b ${theme.bg} text-white`}>
-          <div className="max-w-md mx-auto px-4 pb-10 flex flex-col gap-6">
-            <SearchBar onSelectCity={handleSelectCity} onUseCurrentLocation={loadCurrent} />
-            <CurrentWeather data={data} theme={theme} />
+        <div className={`relative min-h-screen w-full bg-gradient-to-b ${theme.bg} text-white overflow-hidden`}>
+          <WeatherBackground condition={data.condition} />
+          <div className="relative z-10 max-w-md mx-auto px-4 pb-10 flex flex-col gap-4">
+            <div className="pt-6 flex flex-col gap-3">
+              <SearchBar onSelectCity={handleSelectCity} onUseCurrentLocation={loadCurrent} />
+              <FavoritesPanel
+                favorites={favorites}
+                currentLoc={currentLoc}
+                onSelect={handleSelectCity}
+                onRemove={handleRemoveFavorite}
+              />
+            </div>
 
-            {/* 부가 정보 카드 그리드 */}
+            <CurrentWeather
+              data={data}
+              theme={theme}
+              isFavorite={isFavorite}
+              onToggleFavorite={handleToggleFavorite}
+            />
+
             <section aria-label="상세 정보" className="grid grid-cols-2 gap-3">
               <InfoCard icon="🌡️" label="최고/최저" value={`${data.tempMax}° / ${data.tempMin}°`} />
               <InfoCard icon="💧" label="습도" value={`${data.humidity}%`} sub={data.humidity < 40 ? "건조" : "쾌적"} />

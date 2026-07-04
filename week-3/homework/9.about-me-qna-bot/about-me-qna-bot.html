@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Ask Amy — 개인 Q&A 봇</title>
+  <title>About Me Q&A — 나를 설명하는 봇</title>
 
   <!-- ⚠️ 모든 CDN 버전 고정. Babel 은 7.x 고정 (8.x 미지원). -->
   <script src="https://cdn.tailwindcss.com/3.4.16"></script>
@@ -18,11 +18,11 @@
 
   <style>
     :root {
-      --bg: #ffffff;      /* 메인 채팅 흰색 */
-      --sidebar: #f9f7f8; /* 아주 옅은 회색+핑크 기운 */
+      --bg: #ffffff;
+      --sidebar: #f7f8fa;
       --chat: #ffffff;
       --input: #ffffff;
-      --accent: #fb7185;  /* 큐티 로즈/핑크 */
+      --accent: #6366f1;
     }
     html, body { background: var(--sidebar); height: 100%; }
     body {
@@ -57,15 +57,12 @@
     }
     .animate-floaty { animation: floaty 3.5s ease-in-out infinite; }
 
-    /* 커스텀 스크롤바 (라이트) */
     ::-webkit-scrollbar { width: 8px; }
     ::-webkit-scrollbar-track { background: transparent; }
-    ::-webkit-scrollbar-thumb { background: #f3d5dd; border-radius: 8px; }
-    ::-webkit-scrollbar-thumb:hover { background: #f0b9c7; }
+    ::-webkit-scrollbar-thumb { background: #d9dcf3; border-radius: 8px; }
+    ::-webkit-scrollbar-thumb:hover { background: #b8bdec; }
 
     textarea { scrollbar-width: thin; }
-
-    /* 채팅 입력창은 스크롤바를 숨기고 자동 높이 조절만 사용 */
     .chat-textarea::-webkit-scrollbar { display: none; }
     .chat-textarea { scrollbar-width: none; -ms-overflow-style: none; }
   </style>
@@ -74,30 +71,19 @@
   <div id="root"></div>
 
   <script type="text/babel">
-    // ========================================
-    // React Hooks
-    // ========================================
     const { useState, useRef, useEffect, useCallback } = React;
 
-    // ========================================
-    // API 설정
-    // ========================================
     const API_BASE_URL = '/api';
-
-    // ========================================
-    // 🎨 Design System Components
-    // ========================================
 
     // 간단한 마크다운 렌더러 (**굵게**, 줄바꿈, 글머리 기호)
     function renderMarkdown(text) {
       const lines = String(text).split('\n');
       const elements = [];
       lines.forEach((line, i) => {
-        // **굵게** 처리
         const parts = line.split(/(\*\*[^*]+\*\*)/g).filter(Boolean);
         const rendered = parts.map((part, j) => {
           if (/^\*\*[^*]+\*\*$/.test(part)) {
-            return <strong key={j} className="font-semibold text-rose-500">{part.slice(2, -2)}</strong>;
+            return <strong key={j} className="font-semibold text-indigo-500">{part.slice(2, -2)}</strong>;
           }
           return <React.Fragment key={j}>{part}</React.Fragment>;
         });
@@ -111,7 +97,7 @@
             key={i}
             className={isBullet ? 'pl-4 relative leading-relaxed' : 'leading-relaxed'}
           >
-            {isBullet && <span className="absolute left-0 text-rose-400">•</span>}
+            {isBullet && <span className="absolute left-0 text-indigo-400">•</span>}
             {isBullet
               ? rendered.map((r, k) => (typeof r === 'object' && r.props && typeof r.props.children === 'string')
                   ? <React.Fragment key={k}>{r.props.children.replace(/^\s*[-•]\s+/, '')}</React.Fragment>
@@ -132,8 +118,8 @@
       };
       return (
         <div className={`${sizes[size]} ${className} rounded-full grid place-items-center
-          bg-gradient-to-br from-rose-300 via-pink-300 to-orange-200 text-white font-bold
-          shadow-md shadow-rose-200/70 ring-2 ring-white select-none`}>
+          bg-gradient-to-br from-indigo-400 via-violet-400 to-blue-300 text-white font-bold
+          shadow-md shadow-indigo-200/70 ring-2 ring-white select-none`}>
           🙋‍♀️
         </div>
       );
@@ -145,7 +131,7 @@
           {[0, 1, 2].map(i => (
             <span
               key={i}
-              className="typing-dot w-2 h-2 rounded-full bg-rose-400"
+              className="typing-dot w-2 h-2 rounded-full bg-indigo-400"
               style={{ animationDelay: `${i * 0.16}s` }}
             />
           ))}
@@ -153,7 +139,6 @@
       );
     }
 
-    // 전송 아이콘 (paper plane)
     function SendIcon({ className = '' }) {
       return (
         <svg className={className} viewBox="0 0 24 24" fill="none"
@@ -185,16 +170,12 @@
       );
     }
 
-    // ========================================
-    // 🧩 Chat Bubble Components
-    // ========================================
-
     function QuestionBubble({ text }) {
       return (
         <div className="flex justify-end animate-fadeInUp">
           <div className="max-w-[85%] sm:max-w-[75%] px-4 py-3 rounded-[22px] rounded-br-md
-            bg-gradient-to-br from-rose-400 to-pink-400 text-white text-[15px]
-            leading-relaxed shadow-sm shadow-rose-200/80 whitespace-pre-wrap break-words">
+            bg-gradient-to-br from-indigo-400 to-violet-400 text-white text-[15px]
+            leading-relaxed shadow-sm shadow-indigo-200/80 whitespace-pre-wrap break-words">
             {text}
           </div>
         </div>
@@ -206,8 +187,8 @@
         <div className="flex justify-start gap-3 animate-fadeInUp">
           <Avatar size="sm" className="mt-0.5 shrink-0" />
           <div className="max-w-[85%] sm:max-w-[75%] px-4 py-3 rounded-[22px] rounded-bl-md
-            bg-white border border-rose-100 text-gray-700 text-[15px]
-            shadow-sm shadow-rose-100/60 break-words">
+            bg-white border border-indigo-100 text-gray-700 text-[15px]
+            shadow-sm shadow-indigo-100/60 break-words">
             {loading ? <TypingIndicator /> : children}
           </div>
         </div>
@@ -226,11 +207,8 @@
       );
     }
 
-    // ========================================
-    // 🧩 Sidebar
-    // ========================================
     const SUGGESTIONS = [
-      '무슨 일 해?',
+      '이 사람 무슨 일 해?',
       '어떤 프로젝트 담당하고 있어?',
       'MBTI가 뭐야?',
       '어떤 툴 써?',
@@ -245,46 +223,42 @@
     function Sidebar({ onAsk, disabled, mobileOpen, onClose }) {
       return (
         <>
-          {/* 모바일 오버레이 */}
           {mobileOpen && (
             <div
               onClick={onClose}
-              className="fixed inset-0 bg-rose-900/20 backdrop-blur-sm z-30 md:hidden"
+              className="fixed inset-0 bg-indigo-900/20 backdrop-blur-sm z-30 md:hidden"
               aria-hidden="true"
             />
           )}
 
           <aside className={`
             fixed md:static top-0 left-0 z-40 h-full w-[290px] shrink-0
-            bg-[#f9f7f8] border-r border-rose-100 flex flex-col
+            bg-[#f7f8fa] border-r border-indigo-100 flex flex-col
             transition-transform duration-300 ease-out
             ${mobileOpen ? 'translate-x-0' : '-translate-x-full'} md:translate-x-0
           `}>
-            {/* 모바일 닫기 버튼 */}
             <button
               onClick={onClose}
               aria-label="사이드바 닫기"
               className="md:hidden absolute top-4 right-4 p-1.5 rounded-lg
-                text-gray-400 hover:text-rose-500 hover:bg-rose-100 transition-colors">
+                text-gray-400 hover:text-indigo-500 hover:bg-indigo-100 transition-colors">
               <CloseIcon className="w-5 h-5" />
             </button>
 
-            {/* 프로필 카드 */}
-            <div className="p-6 border-b border-rose-100">
+            <div className="p-6 border-b border-indigo-100">
               <div className="flex flex-col items-center text-center">
                 <Avatar size="lg" className="mb-4 animate-floaty" />
-                <h2 className="text-xl font-bold text-gray-800">Amy <span className="text-rose-400">🌸</span></h2>
-                <p className="mt-1 text-sm text-rose-400 font-semibold">
+                <h2 className="text-xl font-bold text-gray-800">Amy <span className="text-indigo-400">✨</span></h2>
+                <p className="mt-1 text-sm text-indigo-400 font-semibold">
                   Product Designer
                 </p>
                 <p className="text-xs text-gray-400 mt-0.5">@ NEW ID</p>
               </div>
             </div>
 
-            {/* 추천 질문 */}
             <div className="flex-1 overflow-y-auto p-5">
-              <p className="text-xs font-bold uppercase tracking-wider text-rose-400 mb-3 px-1">
-                💗 추천 질문
+              <p className="text-xs font-bold uppercase tracking-wider text-indigo-400 mb-3 px-1">
+                💬 추천 질문
               </p>
               <div className="space-y-2">
                 {SUGGESTIONS.map(s => (
@@ -294,24 +268,23 @@
                     onClick={() => onAsk(s)}
                     disabled={disabled}
                     className="w-full text-left px-4 py-3 rounded-2xl text-sm font-medium
-                      bg-white border border-rose-100 text-gray-600 shadow-sm shadow-rose-100/40
-                      hover:bg-rose-50 hover:border-rose-300 hover:text-rose-500
+                      bg-white border border-indigo-100 text-gray-600 shadow-sm shadow-indigo-100/40
+                      hover:bg-indigo-50 hover:border-indigo-300 hover:text-indigo-500
                       active:scale-[0.98]
                       transition-all duration-200
                       disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-white
-                      disabled:hover:border-rose-100 flex items-center gap-2.5">
-                    <span>💬</span>
+                      disabled:hover:border-indigo-100 flex items-center gap-2.5">
+                    <span>💡</span>
                     {s}
                   </button>
                 ))}
               </div>
             </div>
 
-            {/* 앱 설명 */}
-            <div className="p-5 border-t border-rose-100">
+            <div className="p-5 border-t border-indigo-100">
               <p className="text-xs leading-relaxed text-gray-400">
-                Amy를 대신해 답해주는 AI Q&A 봇이에요 🐣 답변은 Amy의{' '}
-                <span className="text-rose-400 font-medium">about-me.md</span> 내용만 근거로 생성됩니다.
+                Amy를 대신해 답해주는 AI Q&A 봇이에요 ✨ 답변은 Amy의{' '}
+                <span className="text-indigo-400 font-medium">about-me.md</span> 내용만 근거로 생성됩니다.
               </p>
             </div>
           </aside>
@@ -319,19 +292,15 @@
       );
     }
 
-    // ========================================
-    // 🧩 Chat Header
-    // ========================================
     function ChatHeader({ onMenu }) {
       return (
         <header className="flex items-center gap-3 px-4 sm:px-6 py-3.5
-          border-b border-rose-100 bg-white/80 backdrop-blur-md shrink-0">
-          {/* 모바일 메뉴 버튼 */}
+          border-b border-indigo-100 bg-white/80 backdrop-blur-md shrink-0">
           <button
             onClick={onMenu}
             aria-label="메뉴 열기"
-            className="md:hidden p-1.5 rounded-lg text-gray-400 hover:text-rose-500
-              hover:bg-rose-100 transition-colors">
+            className="md:hidden p-1.5 rounded-lg text-gray-400 hover:text-indigo-500
+              hover:bg-indigo-100 transition-colors">
             <MenuIcon className="w-5 h-5" />
           </button>
 
@@ -347,11 +316,7 @@
       );
     }
 
-    // ========================================
-    // 🧩 Chat Input
-    // ========================================
     function ChatInput({ value, onChange, onSend, disabled, inputRef }) {
-      // 멀티라인 높이 자동 조절
       useEffect(() => {
         const el = inputRef.current;
         if (!el) return;
@@ -370,15 +335,15 @@
         <div className="px-4 sm:px-6 py-4 bg-white shrink-0">
           <div className="max-w-3xl mx-auto">
             <div className="flex items-end gap-2 p-2 rounded-[26px]
-              bg-white border border-rose-200 shadow-md shadow-rose-100/60
-              focus-within:border-rose-400 focus-within:shadow-rose-200/70 transition-all">
+              bg-white border border-indigo-200 shadow-md shadow-indigo-100/60
+              focus-within:border-indigo-400 focus-within:shadow-indigo-200/70 transition-all">
               <textarea
                 ref={inputRef}
                 rows={1}
                 value={value}
                 onChange={(e) => onChange(e.target.value)}
                 onKeyDown={handleKeyDown}
-                placeholder="Amy에게 메시지 보내기…"
+                placeholder="Amy에 대해 궁금한 걸 물어보세요…"
                 aria-label="질문 입력"
                 autoFocus
                 className="chat-textarea flex-1 bg-transparent px-3 py-2 text-[15px] text-gray-800 resize-none
@@ -391,9 +356,9 @@
                 disabled={disabled || !value.trim()}
                 aria-label="질문 전송"
                 className="shrink-0 w-10 h-10 grid place-items-center rounded-full
-                  bg-gradient-to-br from-rose-400 to-pink-400 hover:from-rose-500 hover:to-pink-500
-                  active:scale-90 text-white shadow-sm shadow-rose-200
-                  disabled:from-rose-200 disabled:to-pink-200 disabled:text-white/70 disabled:cursor-not-allowed
+                  bg-gradient-to-br from-indigo-400 to-violet-400 hover:from-indigo-500 hover:to-violet-500
+                  active:scale-90 text-white shadow-sm shadow-indigo-200
+                  disabled:from-indigo-200 disabled:to-violet-200 disabled:text-white/70 disabled:cursor-not-allowed
                   disabled:active:scale-100 disabled:shadow-none transition-all duration-150">
                 <SendIcon className="w-5 h-5" />
               </button>
@@ -406,9 +371,6 @@
       );
     }
 
-    // ========================================
-    // 🚀 App Component
-    // ========================================
     function App() {
       const [input, setInput] = useState('');
       const [messages, setMessages] = useState([]); // { role: 'q'|'a'|'error', text }
@@ -417,7 +379,6 @@
       const scrollRef = useRef(null);
       const inputRef = useRef(null);
 
-      // 새 메시지 추가 시 자동 스크롤
       useEffect(() => {
         if (scrollRef.current) {
           scrollRef.current.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' });
@@ -458,9 +419,8 @@
       const hasChat = messages.length > 0;
 
       return (
-        <div className="flex h-full bg-[#f9f7f8] text-gray-800 overflow-hidden">
+        <div className="flex h-full bg-[#f7f8fa] text-gray-800 overflow-hidden">
 
-          {/* ===== 사이드바 ===== */}
           <Sidebar
             onAsk={ask}
             disabled={loading}
@@ -468,14 +428,12 @@
             onClose={() => setSidebarOpen(false)}
           />
 
-          {/* ===== 채팅 영역 ===== */}
           <div className="flex-1 flex flex-col min-w-0 bg-white">
             <ChatHeader onMenu={() => setSidebarOpen(true)} />
 
-            {/* 메시지 스크롤 영역 */}
             <main
               ref={scrollRef}
-              className="flex-1 overflow-y-auto px-4 sm:px-6 py-6 bg-gradient-to-b from-rose-50/40 to-white">
+              className="flex-1 overflow-y-auto px-4 sm:px-6 py-6 bg-gradient-to-b from-indigo-50/40 to-white">
               <div className="max-w-3xl mx-auto space-y-5">
                 {!hasChat && !loading && (
                   <div className="h-full grid place-items-center text-center py-16">
@@ -486,7 +444,7 @@
                       </p>
                       <p className="text-sm text-gray-500 mt-2 max-w-sm leading-relaxed">
                         저에 대해 궁금한 게 있나요? 아래에 메시지를 입력하거나
-                        왼쪽 추천 질문을 눌러보세요 🌷
+                        왼쪽 추천 질문을 눌러보세요 ✨
                       </p>
                     </div>
                   </div>
@@ -502,7 +460,6 @@
               </div>
             </main>
 
-            {/* 입력창 */}
             <ChatInput
               value={input}
               onChange={setInput}
@@ -515,9 +472,6 @@
       );
     }
 
-    // ========================================
-    // 🚀 Render
-    // ========================================
     ReactDOM.createRoot(document.getElementById('root')).render(<App />);
   </script>
 </body>

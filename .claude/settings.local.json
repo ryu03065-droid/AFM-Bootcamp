@@ -48,7 +48,21 @@
       "Bash(node *)",
       "Bash(kill 72195 99287)",
       "Bash(lsof -nP -iTCP:3000 -sTCP:LISTEN)",
-      "Bash(kill 76765)"
+      "Bash(kill 76765)",
+      "Bash(mkdir -p /Users/ahnsoeun/Downloads/AFM-Bootcamp/week-4/todo-app)",
+      "Bash(npm init *)",
+      "Bash(npm install *)",
+      "Bash(printf '할일 1: 강의 복습\\\\n- week-3 강의 내용 다시 정리하기\\\\n- 모르는 개념 추가 검색 및 메모')",
+      "Bash(printf '할일 2: 과제 완성\\\\n- week-4 숙제 문제 풀기\\\\n- 코드 작성 및 테스트')",
+      "Bash(printf '할일 3: 프로젝트 아이디어 구상\\\\n- 미니 프로젝트 주제 3개 이상 브레인스토밍\\\\n- 구현 가능성 검토 및 선택')",
+      "Bash(printf '할일 4: 코드 리뷰\\\\n- 지난 주 작성한 코드 다시 읽기\\\\n- 개선할 부분 찾아서 리팩토링')",
+      "Bash(printf '할일 5: 다음 주 준비\\\\n- week-5 강의 미리 훑어보기\\\\n- 필요한 라이브러리 설치 및 환경 세팅')",
+      "Bash(kill 88111)",
+      "Bash(ps -o command= -p 88111)",
+      "Bash(lsof -ti:3002)",
+      "Bash(npx -y serve -l 3003 .)",
+      "Bash(lsof -ti:3003)",
+      "Bash(vercel *)"
     ]
   }
 }

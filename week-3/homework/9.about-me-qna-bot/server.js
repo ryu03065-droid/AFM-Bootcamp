@@ -4,24 +4,24 @@ const http = require('http');
 const fs = require('fs');
 const path = require('path');
 
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 3020;
 const GROQ_API_KEY = process.env.GROQ_API_KEY || '';
 
 if (!GROQ_API_KEY) {
   console.warn('⚠️  GROQ_API_KEY가 설정되지 않았습니다.');
 }
 
-// about-me.md 읽기
+// about-me.md 읽기 (섹션별로 나뉜 컨텍스트 문서)
 const aboutMePath = path.join(__dirname, 'about-me.md');
 const aboutMe = fs.readFileSync(aboutMePath, 'utf-8');
 
-const SYSTEM_PROMPT = `당신은 아래 [내 정보] 문서를 근거로 Amy(안소은)에 대한 질문에 답변하는 봇입니다.
+const SYSTEM_PROMPT = `당신은 아래 [내 정보]에 근거해 안소은(Amy)에 대한 질문에 답하는 Q&A 봇입니다.
 
 규칙:
-1. 반드시 아래 [내 정보]에 있는 내용만 근거로 답변하세요.
-2. 문서에 없는 내용은 절대 지어내지 말고, "그 부분은 제가 알고 있는 정보에 없어요 🤔"라고 답하세요.
-3. 친근하고 자연스러운 한국어로 답변하세요.
-4. 간결하게 핵심만 전달하세요.
+1. 반드시 아래 [내 정보]에 있는 내용만 근거로 답변하세요. 당신의 일반 지식을 사용하지 마세요.
+2. [내 정보]에 없는 내용은 절대 지어내지 말고, "그 부분은 제가 알고 있는 정보에 없어요 🤔"라고 답하세요.
+3. 친근하고 자연스러운 한국어로, 간결하게 핵심만 답변하세요.
+4. 한자(漢字)를 절대 사용하지 마세요. 한글과 필요한 경우 영어 단어만 사용하세요.
 
 [내 정보]
 ${aboutMe}`;
@@ -36,7 +36,7 @@ function sleep(ms) {
 }
 
 async function callGroq(question) {
-  const openaiRes = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+  const groqRes = await fetch('https://api.groq.com/openai/v1/chat/completions', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -51,8 +51,8 @@ async function callGroq(question) {
     }),
   });
 
-  if (openaiRes.status === 429) {
-    const errBody = await openaiRes.text();
+  if (groqRes.status === 429) {
+    const errBody = await groqRes.text();
     const waitMatch = errBody.match(/try again in ([\d.]+)s/);
     const waitSeconds = waitMatch ? parseFloat(waitMatch[1]) : 3;
     const err = new Error(`Groq API 오류 (429): ${errBody}`);
@@ -60,13 +60,15 @@ async function callGroq(question) {
     throw err;
   }
 
-  if (!openaiRes.ok) {
-    const err = await openaiRes.text();
-    throw new Error(`Groq API 오류 (${openaiRes.status}): ${err}`);
+  if (!groqRes.ok) {
+    const err = await groqRes.text();
+    throw new Error(`Groq API 오류 (${groqRes.status}): ${err}`);
   }
 
-  const data = await openaiRes.json();
-  return data?.choices?.[0]?.message?.content?.trim() || '';
+  const data = await groqRes.json();
+  const answer = data?.choices?.[0]?.message?.content?.trim() || '';
+  // 한자(CJK Unified Ideographs) 제거
+  return answer.replace(/[一-鿿]/g, '');
 }
 
 async function handleAsk(req, res) {
@@ -107,11 +109,11 @@ async function handleAsk(req, res) {
 }
 
 function serveHtml(res) {
-  const filePath = path.join(__dirname, 'my-qna-bot.html');
+  const filePath = path.join(__dirname, 'about-me-qna-bot.html');
   fs.readFile(filePath, (err, content) => {
     if (err) {
       res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
-      res.end('my-qna-bot.html 파일을 찾을 수 없습니다.');
+      res.end('about-me-qna-bot.html 파일을 찾을 수 없습니다.');
       return;
     }
     res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
@@ -126,5 +128,5 @@ const server = http.createServer((req, res) => {
 });
 
 server.listen(PORT, () => {
-  console.log(`🤖 Amy Q&A 봇 서버: http://localhost:${PORT}`);
+  console.log(`🤖 About Me Q&A 봇 서버: http://localhost:${PORT}`);
 });
