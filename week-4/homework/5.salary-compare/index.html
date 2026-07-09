@@ -1,0 +1,367 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>익명 연봉·지출 비교</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Black+Han+Sans&family=Noto+Sans+KR:wght@400;500;700&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --bg:         #14161f;
+      --bg-2:       #1b1e2b;
+      --card:       #21242f;
+      --line:       #323647;
+      --ink:        #f2f3f8;
+      --ink-mute:   #8b8fa3;
+      --shadow:     rgba(0,0,0,0.4);
+
+      /* 브랜드 accent (수익/자산 느낌의 에메랄드 + 골드) */
+      --brand:      #1baf7a;
+      --brand-soft: rgba(27,175,122,0.16);
+      --gold:       #eda100;
+      --gold-soft:  rgba(237,161,0,0.16);
+
+      /* 카테고리 차트 팔레트 (dark, 카테고리 고정 순서) */
+      --cat-food:   #3987e5;
+      --cat-housing:#199e70;
+      --cat-transport:#c98500;
+      --cat-subscription:#4caf3a;
+      --cat-other:  #9085e9;
+
+      /* 분포 히스토그램: 순차형(blue) 램프 */
+      --seq-100: #cde2fb;
+      --seq-300: #6da7ec;
+      --seq-500: #256abf;
+      --seq-700: #0d366b;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: 100%; }
+    body {
+      font-family: 'Noto Sans KR', 'Apple SD Gothic Neo', sans-serif;
+      color: var(--ink);
+      background:
+        radial-gradient(800px 460px at 0% -10%, var(--brand-soft), transparent 60%),
+        radial-gradient(800px 460px at 100% 0%, var(--gold-soft), transparent 60%),
+        var(--bg);
+      min-height: 100vh;
+      -webkit-font-smoothing: antialiased;
+    }
+    .wrap { max-width: 640px; margin: 0 auto; padding: 44px 22px 80px; }
+
+    header { text-align: center; margin-bottom: 30px; }
+    .brand {
+      font-family: 'Black Han Sans', sans-serif;
+      font-size: 30px;
+      letter-spacing: 1px;
+      background: linear-gradient(90deg, var(--brand), var(--gold));
+      -webkit-background-clip: text;
+      background-clip: text;
+      color: transparent;
+    }
+    header p { color: var(--ink-mute); margin-top: 8px; font-size: 15px; }
+
+    .hidden { display: none !important; }
+
+    /* ===== 공통 카드 ===== */
+    .card {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 20px;
+      padding: 24px;
+      box-shadow: 0 14px 34px var(--shadow);
+    }
+    .card + .card { margin-top: 18px; }
+
+    /* ===== 입력 폼 ===== */
+    .field { margin-bottom: 18px; }
+    .field:last-child { margin-bottom: 0; }
+    .field label {
+      display: block;
+      font-size: 13px;
+      color: var(--ink-mute);
+      margin-bottom: 8px;
+      font-weight: 500;
+    }
+    .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    select, input[type="number"] {
+      width: 100%;
+      background: var(--bg-2);
+      border: 1.5px solid var(--line);
+      border-radius: 12px;
+      padding: 12px 14px;
+      color: var(--ink);
+      font-family: inherit;
+      font-size: 14.5px;
+      appearance: none;
+    }
+    select:focus, input:focus { outline: none; border-color: var(--brand); }
+    select {
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='9' viewBox='0 0 14 9'%3E%3Cpath d='M1 1l6 6 6-6' stroke='%238b8fa3' stroke-width='1.6' fill='none' fill-rule='evenodd'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right 14px center;
+      padding-right: 34px;
+    }
+    .suffix-wrap { position: relative; }
+    .suffix-wrap input { padding-right: 46px; }
+    .suffix {
+      position: absolute; right: 14px; top: 50%; transform: translateY(-50%);
+      color: var(--ink-mute); font-size: 13px; pointer-events: none;
+    }
+    .section-title {
+      font-size: 14px;
+      color: var(--ink);
+      font-weight: 700;
+      margin: 26px 0 14px;
+      display: flex; align-items: center; gap: 8px;
+    }
+    .cat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .cat-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+
+    .submit-btn {
+      display: block;
+      width: 100%;
+      margin-top: 24px;
+      padding: 14px 0;
+      border: none;
+      border-radius: 12px;
+      background: linear-gradient(90deg, var(--brand), var(--gold));
+      color: #0e1108;
+      font-family: 'Black Han Sans', sans-serif;
+      font-size: 15px;
+      letter-spacing: 0.5px;
+      cursor: pointer;
+    }
+    .submit-btn:disabled { opacity: .5; cursor: not-allowed; }
+    .form-error {
+      color: #ff8a80;
+      font-size: 13px;
+      margin-top: 12px;
+      text-align: center;
+    }
+
+    /* ===== 결과 뷰 ===== */
+    .stat-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      margin-bottom: 18px;
+    }
+    .stat-tile {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      padding: 18px;
+    }
+    .stat-tile .label { font-size: 12.5px; color: var(--ink-mute); margin-bottom: 6px; }
+    .stat-tile .value {
+      font-family: 'Black Han Sans', sans-serif;
+      font-size: 24px;
+      letter-spacing: 0.3px;
+    }
+    .stat-tile.highlight {
+      background: linear-gradient(135deg, var(--brand-soft), var(--gold-soft));
+      border-color: rgba(237,161,0,0.4);
+    }
+    .stat-tile.highlight .value { color: var(--gold); }
+
+    .card h3 {
+      font-size: 15px;
+      font-weight: 700;
+      margin-bottom: 4px;
+    }
+    .card .subtext { font-size: 12.5px; color: var(--ink-mute); margin-bottom: 18px; }
+
+    /* 분포 히스토그램 */
+    .hist { display: flex; align-items: flex-end; gap: 6px; height: 140px; }
+    .hist-col { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; height: 100%; position: relative; }
+    .hist-bar {
+      width: 100%;
+      border-radius: 6px 6px 3px 3px;
+      background: var(--seq-500);
+      min-height: 4px;
+      position: relative;
+      transition: height 0.5s ease;
+    }
+    .hist-bar.me { background: var(--gold); box-shadow: inset 0 0 0 2px rgba(255,255,255,0.85); }
+    .hist-tag {
+      position: absolute;
+      top: -20px;
+      left: 50%;
+      transform: translateX(-50%);
+      font-size: 11px;
+      color: var(--gold);
+      font-weight: 700;
+      white-space: nowrap;
+    }
+    .hist-count {
+      position: absolute;
+      top: -16px;
+      left: 50%;
+      transform: translateX(-50%);
+      font-size: 10.5px;
+      color: var(--ink-mute);
+    }
+    .hist-labels { display: flex; gap: 6px; margin-top: 8px; }
+    .hist-labels span {
+      flex: 1;
+      text-align: center;
+      font-size: 9.5px;
+      color: var(--ink-mute);
+      word-break: keep-all;
+    }
+
+    /* 카테고리 비교 차트 */
+    .legend { display: flex; gap: 18px; margin-bottom: 16px; font-size: 12.5px; color: var(--ink-mute); }
+    .legend-item { display: flex; align-items: center; gap: 6px; }
+    .legend-swatch { width: 10px; height: 10px; border-radius: 3px; }
+    .legend-swatch.avg { background: var(--line); border: 1.5px solid var(--ink-mute); }
+    .legend-swatch.mine { background: var(--brand); }
+
+    .cat-row { margin-bottom: 16px; }
+    .cat-row:last-child { margin-bottom: 0; }
+    .cat-row-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; font-size: 13px; }
+    .cat-row-head .name { display: flex; align-items: center; gap: 7px; font-weight: 500; }
+    .cat-row-head .nums { color: var(--ink-mute); font-size: 12px; }
+    .cat-row-head .nums b { color: var(--ink); font-weight: 700; }
+    .cat-bars { display: flex; flex-direction: column; gap: 4px; }
+    .cat-bar-track { background: var(--bg-2); border-radius: 5px; height: 10px; overflow: hidden; }
+    .cat-bar-fill { height: 100%; border-radius: 5px; transition: width 0.6s ease; }
+    .cat-bar-fill.avg { background: var(--line); }
+
+    .retry-btn {
+      display: block;
+      width: 100%;
+      margin-top: 18px;
+      padding: 13px 0;
+      border: 1.5px solid var(--line);
+      border-radius: 12px;
+      background: transparent;
+      color: var(--ink-mute);
+      font-family: inherit;
+      font-size: 13.5px;
+      cursor: pointer;
+    }
+    .retry-btn:hover { border-color: var(--brand); color: var(--ink); }
+
+    .empty-note {
+      text-align: center;
+      color: var(--ink-mute);
+      font-size: 13px;
+      padding: 8px 0 0;
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <div class="brand">💰 익명 연봉·지출 비교</div>
+      <p>내 월급과 지출, 남들은 어느 정도일까? 익명으로 비교해보세요</p>
+    </header>
+
+    <!-- ===== 입력 폼 ===== -->
+    <section class="card" id="form-view">
+      <div class="field">
+        <label>직군</label>
+        <select id="job-role">
+          <option value="기획">기획</option>
+          <option value="디자인">디자인</option>
+          <option value="개발">개발</option>
+          <option value="마케팅">마케팅</option>
+          <option value="영업">영업</option>
+          <option value="데이터">데이터</option>
+          <option value="기타">기타</option>
+        </select>
+      </div>
+
+      <div class="row2">
+        <div class="field">
+          <label>연차</label>
+          <div class="suffix-wrap">
+            <input type="number" id="years" min="0" max="50" placeholder="3" />
+            <span class="suffix">년차</span>
+          </div>
+        </div>
+        <div class="field">
+          <label>월급 (세전)</label>
+          <div class="suffix-wrap">
+            <input type="number" id="salary" min="1" max="10000" placeholder="350" />
+            <span class="suffix">만원</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="section-title">📊 월 지출 (카테고리별)</div>
+      <div class="cat-grid">
+        <div class="field">
+          <label><span class="cat-dot" style="background:var(--cat-food)"></span> 식비</label>
+          <div class="suffix-wrap"><input type="number" id="cat-food" min="0" max="5000" placeholder="60" /><span class="suffix">만원</span></div>
+        </div>
+        <div class="field">
+          <label><span class="cat-dot" style="background:var(--cat-housing)"></span> 주거</label>
+          <div class="suffix-wrap"><input type="number" id="cat-housing" min="0" max="5000" placeholder="80" /><span class="suffix">만원</span></div>
+        </div>
+        <div class="field">
+          <label><span class="cat-dot" style="background:var(--cat-transport)"></span> 교통</label>
+          <div class="suffix-wrap"><input type="number" id="cat-transport" min="0" max="5000" placeholder="15" /><span class="suffix">만원</span></div>
+        </div>
+        <div class="field">
+          <label><span class="cat-dot" style="background:var(--cat-subscription)"></span> 구독료</label>
+          <div class="suffix-wrap"><input type="number" id="cat-subscription" min="0" max="5000" placeholder="5" /><span class="suffix">만원</span></div>
+        </div>
+        <div class="field" style="grid-column: 1 / -1;">
+          <label><span class="cat-dot" style="background:var(--cat-other)"></span> 기타</label>
+          <div class="suffix-wrap"><input type="number" id="cat-other" min="0" max="5000" placeholder="30" /><span class="suffix">만원</span></div>
+        </div>
+      </div>
+
+      <button class="submit-btn" id="submit-btn">익명으로 제출하고 비교 결과 보기</button>
+      <div class="form-error hidden" id="form-error"></div>
+    </section>
+
+    <!-- ===== 결과 뷰 ===== -->
+    <section id="results-view" class="hidden">
+      <div class="stat-grid">
+        <div class="stat-tile">
+          <div class="label">전체 참여자</div>
+          <div class="value" id="stat-total">-</div>
+        </div>
+        <div class="stat-tile highlight">
+          <div class="label">내 위치</div>
+          <div class="value" id="stat-percentile">-</div>
+        </div>
+        <div class="stat-tile">
+          <div class="label">평균 월급</div>
+          <div class="value" id="stat-avg-salary">-</div>
+        </div>
+        <div class="stat-tile">
+          <div class="label">평균 지출</div>
+          <div class="value" id="stat-avg-expense">-</div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>월급 분포</h3>
+        <div class="subtext">전체 참여자의 월급 구간별 인원 수 (금색 막대 = 나)</div>
+        <div class="hist" id="hist"></div>
+        <div class="hist-labels" id="hist-labels"></div>
+      </div>
+
+      <div class="card">
+        <h3>카테고리별 지출 비교</h3>
+        <div class="subtext">나의 지출 vs 전체 평균 지출</div>
+        <div class="legend">
+          <span class="legend-item"><span class="legend-swatch avg"></span>전체 평균</span>
+          <span class="legend-item"><span class="legend-swatch mine"></span>나의 지출</span>
+        </div>
+        <div id="cat-compare"></div>
+      </div>
+
+      <button class="retry-btn" id="retry-btn">다른 데이터로 다시 제출하기</button>
+    </section>
+  </div>
+
+  <script src="client.js"></script>
+</body>
+</html>

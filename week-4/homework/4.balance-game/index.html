@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>실시간 밸런스 게임</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Black+Han+Sans&family=Noto+Sans+KR:wght@400;500;700&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --bg:         #14161f;
+      --bg-2:       #1b1e2b;
+      --card:       #21242f;
+      --line:       #323647;
+      --ink:        #f2f3f8;
+      --ink-mute:   #8b8fa3;
+
+      --a:          #ff4d6d;
+      --a-soft:     rgba(255,77,109,0.16);
+      --b:          #3fa9ff;
+      --b-soft:     rgba(63,169,255,0.16);
+
+      --shadow: rgba(0,0,0,0.4);
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: 100%; }
+    body {
+      font-family: 'Noto Sans KR', 'Apple SD Gothic Neo', sans-serif;
+      color: var(--ink);
+      background:
+        radial-gradient(800px 460px at 0% -10%, var(--a-soft), transparent 60%),
+        radial-gradient(800px 460px at 100% 0%, var(--b-soft), transparent 60%),
+        var(--bg);
+      min-height: 100vh;
+      -webkit-font-smoothing: antialiased;
+    }
+    .wrap { max-width: 720px; margin: 0 auto; padding: 44px 22px 80px; }
+
+    header { text-align: center; margin-bottom: 30px; }
+    .brand {
+      font-family: 'Black Han Sans', sans-serif;
+      font-size: 32px;
+      letter-spacing: 1px;
+      background: linear-gradient(90deg, var(--a), var(--b));
+      -webkit-background-clip: text;
+      background-clip: text;
+      color: transparent;
+    }
+    header p { color: var(--ink-mute); margin-top: 8px; font-size: 15px; }
+
+    /* ===== 대결 등록 카드 ===== */
+    .composer {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 20px;
+      padding: 22px;
+      box-shadow: 0 14px 34px var(--shadow);
+      margin-bottom: 34px;
+    }
+    .composer-title {
+      font-size: 14px;
+      color: var(--ink-mute);
+      margin-bottom: 14px;
+      font-weight: 500;
+    }
+    .composer-inputs {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .composer-inputs input {
+      flex: 1;
+      min-width: 0;
+      background: var(--bg-2);
+      border: 1.5px solid var(--line);
+      border-radius: 12px;
+      padding: 13px 14px;
+      color: var(--ink);
+      font-family: inherit;
+      font-size: 14.5px;
+    }
+    .composer-inputs input:first-child:focus { border-color: var(--a); }
+    .composer-inputs input:last-child:focus { border-color: var(--b); }
+    .composer-inputs input::placeholder { color: var(--ink-mute); }
+    .vs-mark {
+      font-family: 'Black Han Sans', sans-serif;
+      font-size: 15px;
+      color: var(--ink-mute);
+      flex-shrink: 0;
+    }
+    .submit-btn {
+      display: block;
+      width: 100%;
+      margin-top: 14px;
+      padding: 13px 0;
+      border: none;
+      border-radius: 12px;
+      background: linear-gradient(90deg, var(--a), var(--b));
+      color: #fff;
+      font-family: 'Black Han Sans', sans-serif;
+      font-size: 15px;
+      letter-spacing: 0.5px;
+      cursor: pointer;
+    }
+    .submit-btn:disabled { opacity: .5; cursor: not-allowed; }
+
+    /* ===== 밸런스 게임 카드 ===== */
+    .question-list { display: flex; flex-direction: column; gap: 18px; }
+    .vs-card {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      overflow: hidden;
+      box-shadow: 0 10px 24px var(--shadow);
+    }
+    .vs-bar {
+      display: flex;
+      min-height: 96px;
+    }
+    .vs-side {
+      flex: 1 1 50%;
+      min-width: 0;
+      border: none;
+      cursor: pointer;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      padding: 14px 10px;
+      font-family: inherit;
+      color: #fff;
+      transition: flex-basis 0.5s ease;
+      position: relative;
+    }
+    .side-a { background: linear-gradient(135deg, var(--a), #c72d4b); }
+    .side-b { background: linear-gradient(135deg, var(--b), #1f6fbf); }
+    .vs-side.picked { box-shadow: inset 0 0 0 3px rgba(255,255,255,0.85); }
+    .side-label {
+      font-size: 14.5px;
+      font-weight: 500;
+      line-height: 1.4;
+      text-align: center;
+      word-break: keep-all;
+    }
+    .side-pct {
+      font-family: 'Black Han Sans', sans-serif;
+      font-size: 22px;
+      letter-spacing: 0.5px;
+    }
+    .vs-foot {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 12px 18px;
+      font-size: 13px;
+      color: var(--ink-mute);
+    }
+    .voted-badge { color: #7fd6a0; }
+    .cta { color: var(--ink-mute); }
+
+    .empty {
+      text-align: center;
+      color: var(--ink-mute);
+      padding: 50px 0;
+      font-size: 15px;
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <div class="brand">⚔️ 실시간 밸런스 게임</div>
+      <p>둘 중 하나만 골라야 한다면?</p>
+    </header>
+
+    <section class="composer">
+      <div class="composer-title">✏️ 새로운 대결 등록하기</div>
+      <div class="composer-inputs">
+        <input id="option-a" type="text" placeholder="예: 월급 500 + 주7일 출근" />
+        <span class="vs-mark">VS</span>
+        <input id="option-b" type="text" placeholder="예: 월급 300 + 주4일 출근" />
+      </div>
+      <button class="submit-btn" id="submit-btn" onclick="submitQuestion()">대결 등록</button>
+    </section>
+
+    <div class="question-list" id="question-list"></div>
+  </div>
+
+  <script src="client.js"></script>
+</body>
+</html>

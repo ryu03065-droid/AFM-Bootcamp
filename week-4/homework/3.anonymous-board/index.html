@@ -36,6 +36,7 @@
         radial-gradient(720px 460px at 100% 0%, rgba(240,165,192,0.10), transparent 58%),
         radial-gradient(760px 520px at 50% 120%, rgba(127,214,192,0.10), transparent 60%),
         var(--night);
+      background-attachment: fixed;
       min-height: 100vh;
       -webkit-font-smoothing: antialiased;
     }
@@ -165,6 +166,7 @@
       word-break: break-word;
       margin-bottom: 12px;
     }
+    .post-actions { display: flex; align-items: center; gap: 8px; }
     .like-btn {
       display: inline-flex; align-items: center; gap: 6px;
       border: 1.5px solid var(--line);
@@ -179,6 +181,17 @@
     }
     .like-btn:hover { border-color: var(--praise); color: var(--praise); }
     .like-btn:active { transform: scale(0.94); }
+    .delete-btn {
+      border: 1.5px solid var(--line);
+      background: transparent;
+      color: var(--ink-mute);
+      border-radius: 999px;
+      padding: 7px 14px;
+      font-family: inherit;
+      font-size: 13px;
+      cursor: pointer;
+    }
+    .delete-btn:hover { border-color: var(--worry); color: var(--worry); }
 
     .empty {
       text-align: center;

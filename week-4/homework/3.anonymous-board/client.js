@@ -1,6 +1,20 @@
 let selectedCategory = '고민';
 let currentSort = 'latest';
 
+function getMyTokens() {
+  return JSON.parse(localStorage.getItem('myPostTokens') || '{}');
+}
+function saveMyToken(id, token) {
+  const tokens = getMyTokens();
+  tokens[id] = token;
+  localStorage.setItem('myPostTokens', JSON.stringify(tokens));
+}
+function removeMyToken(id) {
+  const tokens = getMyTokens();
+  delete tokens[id];
+  localStorage.setItem('myPostTokens', JSON.stringify(tokens));
+}
+
 document.getElementById('cat-tabs').addEventListener('click', (e) => {
   const btn = e.target.closest('.cat-btn');
   if (!btn) return;
@@ -28,6 +42,7 @@ async function loadPosts() {
   const list = document.getElementById('post-list');
   const res = await fetch(`/api/posts?sort=${currentSort}`);
   const posts = await res.json();
+  const myTokens = getMyTokens();
 
   list.innerHTML = posts.length === 0
     ? '<p class="empty">아직 등록된 글이 없어요. 첫 글을 남겨보세요 🌙</p>'
@@ -38,7 +53,10 @@ async function loadPosts() {
           <span class="post-time">${timeAgo(p.created_at)}</span>
         </div>
         <p class="post-content">${escapeHtml(p.content)}</p>
-        <button class="like-btn" onclick="likePost(${p.id})">❤️ 공감 ${p.likes}</button>
+        <div class="post-actions">
+          <button class="like-btn" onclick="likePost(${p.id})">❤️ 공감 ${p.likes}</button>
+          ${myTokens[p.id] ? `<button class="delete-btn" onclick="deletePost(${p.id})">삭제</button>` : ''}
+        </div>
       </div>
     `).join('');
 }
@@ -60,11 +78,13 @@ async function submitPost() {
   const btn = document.getElementById('submit-btn');
   btn.disabled = true;
   try {
-    await fetch('/api/posts', {
+    const res = await fetch('/api/posts', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ content, category: selectedCategory }),
     });
+    const post = await res.json();
+    if (res.ok) saveMyToken(post.id, post.owner_token);
     textarea.value = '';
     loadPosts();
   } finally {
@@ -75,6 +95,19 @@ async function submitPost() {
 
 async function likePost(id) {
   await fetch(`/api/posts/${id}/like`, { method: 'POST' });
+  loadPosts();
+}
+
+async function deletePost(id) {
+  const myTokens = getMyTokens();
+  const owner_token = myTokens[id];
+  if (!owner_token) return;
+  const res = await fetch(`/api/posts/${id}`, {
+    method: 'DELETE',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ owner_token }),
+  });
+  if (res.ok) removeMyToken(id);
   loadPosts();
 }
 
