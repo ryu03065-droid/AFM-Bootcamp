@@ -1,0 +1,925 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>나의 가계부 · AI 소비 분석가</title>
+
+  <!-- Tailwind (버전 고정) -->
+  <script src="https://cdn.tailwindcss.com/3.4.16"></script>
+  <!-- ⚠️ CDN 버전 고정 필수. 미고정 시 @babel/standalone 이 8.x 로 올라가 text/babel 변환이 깨진다. -->
+  <script src="https://unpkg.com/react@18.3.1/umd/react.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone@7.25.9/babel.min.js"></script>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700;900&display=swap" rel="stylesheet" />
+
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Noto Sans KR', 'Apple SD Gothic Neo', 'sans-serif'],
+          },
+          colors: {
+            income:  '#0f9d6c',
+            expense: '#e5484d',
+          },
+          keyframes: {
+            'fade-up': {
+              '0%':   { opacity: '0', transform: 'translateY(6px)' },
+              '100%': { opacity: '1', transform: 'translateY(0)' },
+            },
+            'grow-x': {
+              '0%':   { transform: 'scaleX(0)' },
+              '100%': { transform: 'scaleX(1)' },
+            },
+          },
+          animation: {
+            'fade-up': 'fade-up .35s ease both',
+          },
+        },
+      },
+    };
+  </script>
+
+  <style>
+    html { scroll-behavior: smooth; }
+    body { font-family: 'Noto Sans KR', 'Apple SD Gothic Neo', sans-serif; -webkit-font-smoothing: antialiased; }
+    /* number input의 스피너 제거 */
+    input[type=number]::-webkit-outer-spin-button,
+    input[type=number]::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+    input[type=number] { -moz-appearance: textfield; }
+    .tnum { font-variant-numeric: tabular-nums; }
+    /* 카테고리 바 grow 애니메이션 */
+    .bar-fill { transform-origin: left; animation: grow-x .55s cubic-bezier(.22,1,.36,1) both; }
+  </style>
+</head>
+<body class="bg-slate-100 text-slate-800">
+  <div id="root"></div>
+
+  <script type="text/babel">
+    const { useState, useEffect, useMemo, useCallback, useRef } = React;
+
+    // ========================================
+    // 상수 · 헬퍼
+    // ========================================
+    const API = ''; // 동일 오리진(express.static)에서 서빙되므로 상대경로 사용
+
+    const CATEGORIES = {
+      expense: ['식비', '교통', '주거', '통신비', '구독료', '보험', '의료', '교육', '문화/여가', '쇼핑', '경조사', '반려동물', '기타'],
+      income:  ['급여', '용돈', '부수입', '기타'],
+    };
+
+    // 지출 카테고리별 고정 색 (밝은 배경에서 서로 구별되는 legible 팔레트, dataviz 스킬 검증 완료)
+    const CAT_COLOR = {
+      '식비':     '#f0793b',
+      '교통':     '#3b82f6',
+      '주거':     '#14b8a6',
+      '통신비':   '#0891b2',
+      '구독료':   '#8b5cf6',
+      '보험':     '#4d7c0f',
+      '의료':     '#ef4444',
+      '교육':     '#4f46e5',
+      '문화/여가': '#c026d3',
+      '쇼핑':     '#d97706',
+      '경조사':   '#ec4899',
+      '반려동물': '#92400e',
+      '기타':     '#64748b',
+    };
+
+    // 카테고리별 이모지 (아바타용)
+    const CAT_ICON = {
+      '식비': '🍚', '교통': '🚌', '주거': '🏠', '통신비': '📱', '구독료': '📺',
+      '보험': '🛡️', '의료': '💊', '교육': '📚', '문화/여가': '🎬', '쇼핑': '🛍️',
+      '경조사': '🎁', '반려동물': '🐾', '기타': '📌',
+      '급여': '💼', '용돈': '💰', '부수입': '📈',
+    };
+
+    const pad2 = (n) => String(n).padStart(2, '0');
+    const toMonthStr = (d) => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}`;
+    const todayStr = () => { const d = new Date(); return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`; };
+    const monthLabel = (m) => { const [y, mo] = m.split('-'); return `${y}년 ${Number(mo)}월`; };
+    const shiftMonth = (m, delta) => { const [y, mo] = m.split('-').map(Number); return toMonthStr(new Date(y, mo - 1 + delta, 1)); };
+    const fmt = (n) => Number(n || 0).toLocaleString('ko-KR');
+    const won = (n) => `${fmt(n)}원`;
+    const weekdayKo = ['일', '월', '화', '수', '목', '금', '토'];
+    const dayMeta = (dateStr) => {
+      const [y, mo, d] = dateStr.split('-').map(Number);
+      const wd = new Date(y, mo - 1, d).getDay();
+      return { day: d, month: mo, wd: weekdayKo[wd], isSunday: wd === 0, isSaturday: wd === 6 };
+    };
+    const isCurrentMonth = (m) => m === toMonthStr(new Date());
+
+    // ========================================
+    // 🎨 디자인 시스템 컴포넌트
+    // ========================================
+    function Card({ children, className = '' }) {
+      return (
+        <section className={`bg-white rounded-2xl border border-slate-200/80 shadow-[0_1px_3px_rgba(15,23,42,0.04),0_8px_24px_-12px_rgba(15,23,42,0.12)] ${className}`}>
+          {children}
+        </section>
+      );
+    }
+
+    function SectionHead({ title, sub, right }) {
+      return (
+        <div className="flex items-start justify-between gap-3 mb-4">
+          <div>
+            <h3 className="text-[15px] font-bold text-slate-800">{title}</h3>
+            {sub && <p className="text-[12.5px] text-slate-400 mt-0.5">{sub}</p>}
+          </div>
+          {right}
+        </div>
+      );
+    }
+
+    function Field({ label, htmlFor, children }) {
+      return (
+        <div>
+          <label htmlFor={htmlFor} className="block text-[12.5px] font-medium text-slate-500 mb-1.5">{label}</label>
+          {children}
+        </div>
+      );
+    }
+
+    const inputCls =
+      'w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-[14px] text-slate-800 ' +
+      'placeholder:text-slate-300 outline-none transition focus:border-slate-400 focus:bg-white focus:ring-2 focus:ring-slate-200';
+
+    function Button({ children, variant = 'primary', size = 'md', className = '', ...rest }) {
+      const base = 'inline-flex items-center justify-center font-bold rounded-xl transition active:scale-[.98] disabled:opacity-50 disabled:pointer-events-none';
+      const sizes = { sm: 'px-3 py-1.5 text-[13px]', md: 'px-4 py-2.5 text-[14px]', lg: 'px-5 py-3 text-[15px]' };
+      const variants = {
+        primary: 'bg-slate-900 text-white hover:bg-slate-800 shadow-sm',
+        secondary: 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50',
+        ghost: 'bg-transparent text-slate-400 hover:bg-slate-100 hover:text-slate-700',
+      };
+      return (
+        <button className={`${base} ${sizes[size]} ${variants[variant]} ${className}`} {...rest}>
+          {children}
+        </button>
+      );
+    }
+
+    function Spinner({ className = '' }) {
+      return (
+        <svg className={`animate-spin ${className}`} width="20" height="20" viewBox="0 0 24 24" fill="none">
+          <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="3" opacity="0.2" />
+          <path d="M21 12a9 9 0 0 0-9-9" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
+        </svg>
+      );
+    }
+
+    // ========================================
+    // 🧩 월 네비게이션
+    // ========================================
+    function MonthNav({ month, onShift, onToday }) {
+      const NavBtn = ({ dir, label }) => (
+        <button
+          onClick={() => onShift(dir)}
+          aria-label={dir < 0 ? '이전 달' : '다음 달'}
+          className="w-9 h-9 grid place-items-center rounded-full bg-white border border-slate-200 text-slate-500 hover:text-slate-900 hover:border-slate-300 transition shadow-sm"
+        >
+          <span className="text-lg leading-none -mt-0.5">{label}</span>
+        </button>
+      );
+      return (
+        <div className="flex items-center justify-center gap-4">
+          <NavBtn dir={-1} label="‹" />
+          <div className="text-center min-w-[128px]">
+            <div className="text-[19px] font-black text-slate-900 tracking-tight">{monthLabel(month)}</div>
+            {!isCurrentMonth(month) && (
+              <button onClick={onToday} className="text-[11.5px] text-slate-400 hover:text-slate-700 transition mt-0.5">
+                이번 달로
+              </button>
+            )}
+          </div>
+          <NavBtn dir={1} label="›" />
+        </div>
+      );
+    }
+
+    // ========================================
+    // 🧩 잔액 히어로 (가장 먼저 보이는 핵심 정보)
+    // ========================================
+    function BalanceHero({ summary, loading }) {
+      const balance = summary?.balance ?? 0;
+      const positive = balance >= 0;
+      const saveRate = summary && summary.incomeTotal > 0
+        ? Math.round((balance / summary.incomeTotal) * 100)
+        : null;
+
+      return (
+        <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 text-white p-6 shadow-[0_18px_40px_-18px_rgba(15,23,42,0.6)]">
+          {/* 장식 광원 */}
+          <div className="pointer-events-none absolute -top-16 -right-10 w-56 h-56 rounded-full bg-emerald-500/20 blur-3xl" />
+          <div className="pointer-events-none absolute -bottom-20 -left-10 w-56 h-56 rounded-full bg-indigo-500/20 blur-3xl" />
+
+          <div className="relative">
+            <div className="flex items-center gap-2 text-slate-300/90 text-[13px] font-medium">
+              <span>이번 달 잔액</span>
+              {saveRate !== null && (
+                <span className={`px-2 py-0.5 rounded-full text-[11px] font-bold ${positive ? 'bg-emerald-400/15 text-emerald-300' : 'bg-rose-400/15 text-rose-300'}`}>
+                  {positive ? `수입의 ${saveRate}% 저축` : '적자'}
+                </span>
+              )}
+            </div>
+
+            <div className="mt-2 flex items-end gap-1.5">
+              {loading && !summary ? (
+                <div className="h-9 w-44 rounded-lg bg-white/10 animate-pulse" />
+              ) : (
+                <>
+                  <span className={`tnum text-[38px] leading-none font-black tracking-tight ${positive ? 'text-white' : 'text-rose-300'}`}>
+                    {fmt(balance)}
+                  </span>
+                  <span className="text-[18px] font-bold text-slate-300 mb-0.5">원</span>
+                </>
+              )}
+            </div>
+
+            <div className="mt-5 grid grid-cols-2 gap-3">
+              <HeroStat label="수입" value={summary?.incomeTotal ?? 0} tone="income" loading={loading && !summary} />
+              <HeroStat label="지출" value={summary?.expenseTotal ?? 0} tone="expense" loading={loading && !summary} />
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    function HeroStat({ label, value, tone, loading }) {
+      const isIncome = tone === 'income';
+      return (
+        <div className="rounded-2xl bg-white/[0.06] border border-white/10 px-4 py-3 backdrop-blur">
+          <div className="flex items-center gap-1.5 text-[12px] text-slate-300/80">
+            <span className={`w-1.5 h-1.5 rounded-full ${isIncome ? 'bg-emerald-400' : 'bg-rose-400'}`} />
+            {label}
+          </div>
+          {loading ? (
+            <div className="mt-1.5 h-5 w-20 rounded bg-white/10 animate-pulse" />
+          ) : (
+            <div className={`mt-1 tnum text-[19px] font-black tracking-tight ${isIncome ? 'text-emerald-300' : 'text-rose-300'}`}>
+              {isIncome ? '+' : '−'}{fmt(value)}
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    // ========================================
+    // 🧩 카테고리 지출 차트
+    // ========================================
+    function CategoryChart({ summary, loading }) {
+      const data = summary?.expenseByCategory ?? [];
+      const total = summary?.expenseTotal ?? 0;
+      const max = Math.max(...data.map((d) => d.amount), 1);
+
+      return (
+        <Card className="p-5">
+          <SectionHead
+            title="카테고리별 지출"
+            sub={data.length ? '이번 달 지출 비중' : undefined}
+            right={total > 0 && (
+              <div className="text-right">
+                <div className="text-[11px] text-slate-400">총 지출</div>
+                <div className="tnum text-[15px] font-black text-slate-800">{won(total)}</div>
+              </div>
+            )}
+          />
+
+          {loading && !summary ? (
+            <div className="space-y-3.5">
+              {[0, 1, 2].map((i) => (
+                <div key={i} className="space-y-2">
+                  <div className="h-3 w-full rounded bg-slate-100 animate-pulse" />
+                  <div className="h-2.5 w-full rounded-full bg-slate-100 animate-pulse" />
+                </div>
+              ))}
+            </div>
+          ) : data.length === 0 ? (
+            <EmptyBlock icon="📊" title="지출 내역이 없어요" desc="지출을 추가하면 카테고리별로 정리해 드려요." />
+          ) : (
+            <ul className="space-y-3.5">
+              {data.map((d, i) => {
+                const color = CAT_COLOR[d.category] || '#64748b';
+                const barPct = Math.max((d.amount / max) * 100, 3);
+                const sharePct = total > 0 ? Math.round((d.amount / total) * 100) : 0;
+                return (
+                  <li key={d.category}>
+                    <div className="flex items-center justify-between mb-1.5">
+                      <span className="flex items-center gap-2 text-[13.5px] font-semibold text-slate-700">
+                        <span className="w-2.5 h-2.5 rounded-[3px]" style={{ background: color }} />
+                        {d.category}
+                        <span className="text-[11.5px] font-medium text-slate-400">{sharePct}%</span>
+                      </span>
+                      <span className="tnum text-[13.5px] font-bold text-slate-800">{won(d.amount)}</span>
+                    </div>
+                    <div className="h-2.5 rounded-full bg-slate-100 overflow-hidden">
+                      <div
+                        className="bar-fill h-full rounded-full"
+                        style={{ width: `${barPct}%`, background: color, animationDelay: `${i * 60}ms` }}
+                      />
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </Card>
+      );
+    }
+
+    function EmptyBlock({ icon, title, desc }) {
+      return (
+        <div className="text-center py-8 px-4">
+          <div className="text-3xl mb-2 opacity-80">{icon}</div>
+          <div className="text-[14px] font-semibold text-slate-600">{title}</div>
+          {desc && <div className="text-[12.5px] text-slate-400 mt-1">{desc}</div>}
+        </div>
+      );
+    }
+
+    // ========================================
+    // 🧩 내역 입력/수정 폼
+    // ========================================
+    const EMPTY_FORM = () => ({ type: 'expense', entry_date: todayStr(), amount: '', category: '식비', memo: '' });
+
+    function EntryForm({ editing, onSubmit, onCancelEdit, submitting }) {
+      const [form, setForm] = useState(EMPTY_FORM());
+      const [error, setError] = useState('');
+
+      // 수정 대상이 바뀌면 폼을 그 값으로 채운다
+      useEffect(() => {
+        if (editing) {
+          setForm({
+            type: editing.type,
+            entry_date: editing.entry_date,
+            amount: String(editing.amount),
+            category: editing.category,
+            memo: editing.memo || '',
+          });
+          setError('');
+        }
+      }, [editing]);
+
+      const setType = (type) => {
+        setForm((f) => {
+          const cats = CATEGORIES[type];
+          return { ...f, type, category: cats.includes(f.category) ? f.category : cats[0] };
+        });
+      };
+
+      const update = (key) => (e) => setForm((f) => ({ ...f, [key]: e.target.value }));
+
+      const submit = async (e) => {
+        e.preventDefault();
+        setError('');
+        const amt = Number(form.amount);
+        if (!form.entry_date) return setError('날짜를 입력하세요.');
+        if (!Number.isInteger(amt) || amt <= 0) return setError('금액은 1원 이상의 정수로 입력하세요.');
+        if (!CATEGORIES[form.type].includes(form.category)) return setError('카테고리를 선택하세요.');
+
+        const payload = { ...form, amount: amt, memo: form.memo.trim() };
+        const err = await onSubmit(payload);
+        if (err) { setError(err); return; }
+        // 성공 → 폼 초기화 (수입/지출 토글은 방금 쓰던 값 유지)
+        setForm({ ...EMPTY_FORM(), type: form.type, category: CATEGORIES[form.type][0] });
+      };
+
+      const isExpense = form.type === 'expense';
+
+      return (
+        <Card className="p-5">
+          <SectionHead
+            title={editing ? '내역 수정' : '내역 추가'}
+            sub={editing ? '선택한 내역을 수정합니다' : '수입 또는 지출을 기록하세요'}
+            right={editing && (
+              <span className="text-[11px] font-bold text-amber-600 bg-amber-50 border border-amber-200 rounded-full px-2.5 py-1">
+                수정 중
+              </span>
+            )}
+          />
+
+          <form onSubmit={submit} className="space-y-4">
+            {/* 지출/수입 토글 */}
+            <div className="grid grid-cols-2 gap-2 p-1 bg-slate-100 rounded-xl">
+              <button
+                type="button" onClick={() => setType('expense')}
+                className={`py-2.5 rounded-lg text-[14px] font-bold transition ${isExpense ? 'bg-white text-expense shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
+              >
+                − 지출
+              </button>
+              <button
+                type="button" onClick={() => setType('income')}
+                className={`py-2.5 rounded-lg text-[14px] font-bold transition ${!isExpense ? 'bg-white text-income shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
+              >
+                + 수입
+              </button>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="날짜" htmlFor="f-date">
+                <input id="f-date" type="date" value={form.entry_date} onChange={update('entry_date')} className={inputCls} required />
+              </Field>
+              <Field label="금액" htmlFor="f-amount">
+                <div className="relative">
+                  <input
+                    id="f-amount" type="number" min="1" step="1" inputMode="numeric"
+                    value={form.amount} onChange={update('amount')} placeholder="30,000"
+                    className={`${inputCls} pr-9 tnum`}
+                  />
+                  <span className="absolute right-3.5 top-1/2 -translate-y-1/2 text-[13px] text-slate-400 pointer-events-none">원</span>
+                </div>
+              </Field>
+            </div>
+
+            <Field label="카테고리" htmlFor="f-cat">
+              <div className="flex flex-wrap gap-1.5">
+                {CATEGORIES[form.type].map((c) => {
+                  const active = form.category === c;
+                  const color = isExpense ? (CAT_COLOR[c] || '#64748b') : '#0f9d6c';
+                  return (
+                    <button
+                      key={c} type="button"
+                      onClick={() => setForm((f) => ({ ...f, category: c }))}
+                      className={`px-3 py-1.5 rounded-full text-[13px] font-medium border transition ${active ? 'text-white border-transparent shadow-sm' : 'bg-white text-slate-500 border-slate-200 hover:border-slate-300'}`}
+                      style={active ? { background: color } : undefined}
+                    >
+                      <span className="mr-1">{CAT_ICON[c]}</span>{c}
+                    </button>
+                  );
+                })}
+              </div>
+            </Field>
+
+            <Field label="메모 (선택)" htmlFor="f-memo">
+              <input
+                id="f-memo" type="text" maxLength={200}
+                value={form.memo} onChange={update('memo')}
+                placeholder={isExpense ? '예: 친구랑 점심' : '예: 7월 월급'}
+                className={inputCls}
+              />
+            </Field>
+
+            {error && (
+              <div className="flex items-center gap-2 text-[13px] text-rose-600 bg-rose-50 border border-rose-200 rounded-xl px-3.5 py-2.5">
+                <span>⚠️</span>{error}
+              </div>
+            )}
+
+            <div className="flex gap-2 pt-1">
+              <Button type="submit" size="lg" disabled={submitting} className="flex-1">
+                {submitting ? <Spinner className="text-white" /> : (editing ? '수정 완료' : `${isExpense ? '지출' : '수입'} 추가하기`)}
+              </Button>
+              {editing && (
+                <Button type="button" variant="secondary" size="lg" onClick={onCancelEdit}>
+                  취소
+                </Button>
+              )}
+            </div>
+          </form>
+        </Card>
+      );
+    }
+
+    // ========================================
+    // 🧩 내역 리스트
+    // ========================================
+    function EntryList({ entries, loading, editingId, onEdit, onDelete }) {
+      // 날짜별 그룹핑 (entries는 이미 최신순 정렬)
+      const groups = useMemo(() => {
+        const map = new Map();
+        for (const e of entries) {
+          if (!map.has(e.entry_date)) map.set(e.entry_date, []);
+          map.get(e.entry_date).push(e);
+        }
+        return Array.from(map.entries());
+      }, [entries]);
+
+      return (
+        <Card className="p-5">
+          <SectionHead
+            title="내역"
+            sub={!loading ? `총 ${entries.length}건` : undefined}
+          />
+
+          {loading ? (
+            <div className="space-y-2.5">
+              {[0, 1, 2, 3].map((i) => (
+                <div key={i} className="flex items-center gap-3 py-2">
+                  <div className="w-9 h-9 rounded-xl bg-slate-100 animate-pulse" />
+                  <div className="flex-1 space-y-1.5">
+                    <div className="h-3.5 w-24 rounded bg-slate-100 animate-pulse" />
+                    <div className="h-2.5 w-32 rounded bg-slate-100 animate-pulse" />
+                  </div>
+                  <div className="h-4 w-16 rounded bg-slate-100 animate-pulse" />
+                </div>
+              ))}
+            </div>
+          ) : entries.length === 0 ? (
+            <EmptyBlock icon="🧾" title="이번 달 내역이 없어요" desc="첫 수입이나 지출을 기록해보세요." />
+          ) : (
+            <div className="space-y-5">
+              {groups.map(([date, items]) => {
+                const dm = dayMeta(date);
+                const dayTotal = items.reduce((a, e) => a + (e.type === 'income' ? e.amount : -e.amount), 0);
+                return (
+                  <div key={date}>
+                    <div className="flex items-center justify-between mb-1.5 px-0.5">
+                      <div className="flex items-center gap-1.5 text-[12px] font-semibold">
+                        <span className="text-slate-500">{dm.month}월 {dm.day}일</span>
+                        <span className={dm.isSunday ? 'text-rose-500' : dm.isSaturday ? 'text-blue-500' : 'text-slate-400'}>
+                          ({dm.wd})
+                        </span>
+                      </div>
+                      <span className={`tnum text-[11.5px] font-semibold ${dayTotal >= 0 ? 'text-income/80' : 'text-expense/80'}`}>
+                        {dayTotal >= 0 ? '+' : '−'}{fmt(Math.abs(dayTotal))}
+                      </span>
+                    </div>
+                    <ul className="space-y-1.5">
+                      {items.map((e) => (
+                        <EntryRow key={e.id} entry={e} active={editingId === e.id} onEdit={onEdit} onDelete={onDelete} />
+                      ))}
+                    </ul>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </Card>
+      );
+    }
+
+    function EntryRow({ entry: e, active, onEdit, onDelete }) {
+      const isIncome = e.type === 'income';
+      const color = isIncome ? '#0f9d6c' : (CAT_COLOR[e.category] || '#64748b');
+      return (
+        <li className={`group flex items-center gap-3 rounded-xl px-2.5 py-2 -mx-0.5 transition border ${active ? 'bg-amber-50/70 border-amber-200' : 'border-transparent hover:bg-slate-50'}`}>
+          <div
+            className="w-9 h-9 shrink-0 grid place-items-center rounded-xl text-[16px]"
+            style={{ background: `${color}1a` }}
+            aria-hidden="true"
+          >
+            {CAT_ICON[e.category] || (isIncome ? '💰' : '📌')}
+          </div>
+
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-1.5">
+              <span className="text-[14px] font-semibold text-slate-800 truncate">{e.category}</span>
+            </div>
+            <div className="text-[12px] text-slate-400 truncate">
+              {e.memo ? e.memo : <span className="italic text-slate-300">메모 없음</span>}
+            </div>
+          </div>
+
+          <div className={`tnum text-[14.5px] font-bold whitespace-nowrap ${isIncome ? 'text-income' : 'text-expense'}`}>
+            {isIncome ? '+' : '−'}{fmt(e.amount)}
+          </div>
+
+          <div className="flex items-center gap-0.5 shrink-0 sm:opacity-0 sm:group-hover:opacity-100 transition">
+            <button
+              onClick={() => onEdit(e)} aria-label="수정"
+              className="w-8 h-8 grid place-items-center rounded-lg text-slate-400 hover:bg-white hover:text-slate-700 hover:shadow-sm transition"
+            >✏️</button>
+            <button
+              onClick={() => onDelete(e)} aria-label="삭제"
+              className="w-8 h-8 grid place-items-center rounded-lg text-slate-400 hover:bg-white hover:text-rose-500 hover:shadow-sm transition"
+            >🗑️</button>
+          </div>
+        </li>
+      );
+    }
+
+    // ========================================
+    // 🧩 삭제 확인 모달
+    // ========================================
+    function ConfirmModal({ entry, onClose, onConfirm, busy }) {
+      useEffect(() => {
+        const onKey = (e) => { if (e.key === 'Escape' && !busy) onClose(); };
+        window.addEventListener('keydown', onKey);
+        return () => window.removeEventListener('keydown', onKey);
+      }, [onClose, busy]);
+
+      if (!entry) return null;
+      const isIncome = entry.type === 'income';
+      return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm animate-fade-up" onClick={() => !busy && onClose()} />
+          <div className="relative w-full max-w-xs bg-white rounded-2xl shadow-2xl p-5 animate-fade-up" role="dialog" aria-modal="true">
+            <div className="text-center">
+              <div className="text-3xl mb-2">🗑️</div>
+              <h3 className="text-[16px] font-bold text-slate-800">내역을 삭제할까요?</h3>
+              <p className="text-[13px] text-slate-500 mt-1.5">
+                <b className="text-slate-700">{entry.category}</b> · {' '}
+                <span className={isIncome ? 'text-income font-semibold' : 'text-expense font-semibold'}>
+                  {isIncome ? '+' : '−'}{won(entry.amount)}
+                </span>
+                <br />삭제하면 되돌릴 수 없어요.
+              </p>
+            </div>
+            <div className="flex gap-2 mt-5">
+              <Button variant="secondary" size="lg" className="flex-1" onClick={onClose} disabled={busy}>취소</Button>
+              <Button size="lg" className="flex-1 bg-rose-600 hover:bg-rose-500" onClick={onConfirm} disabled={busy}>
+                {busy ? <Spinner className="text-white" /> : '삭제'}
+              </Button>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // ========================================
+    // 🧩 AI 소비 분석가 (채팅)
+    // ========================================
+    const SUGGESTED_QUESTIONS = [
+      '이번 달 얼마 썼어?',
+      '식비로 가장 많이 쓴 날이 언제야?',
+      '교통비 월평균 얼마야?',
+      '주중 vs 주말 지출 비교해줘',
+      '요일별로 지출이 가장 많은 날은?',
+      '내 소비 습관에서 줄일 수 있는 것 추천해줘',
+    ];
+
+    function ChatBubble({ role, content, pending }) {
+      const isUser = role === 'user';
+      return (
+        <div className={`flex items-start gap-2.5 ${isUser ? 'flex-row-reverse' : ''}`}>
+          <div className={`w-8 h-8 shrink-0 grid place-items-center rounded-full text-[15px] ${isUser ? 'bg-slate-900 text-white' : 'bg-white border border-slate-200 shadow-sm'}`}>
+            {isUser ? '🙂' : '🤖'}
+          </div>
+          <div
+            className={`max-w-[80%] rounded-2xl px-4 py-2.5 text-[14px] leading-relaxed whitespace-pre-wrap ${
+              isUser
+                ? 'bg-slate-900 text-white rounded-tr-sm'
+                : 'bg-white border border-slate-200 text-slate-700 shadow-sm rounded-tl-sm'
+            }`}
+          >
+            {pending ? (
+              <span className="inline-flex items-center gap-1.5 text-slate-400">
+                <Spinner className="w-4 h-4" /> 분석 중...
+              </span>
+            ) : content}
+          </div>
+        </div>
+      );
+    }
+
+    function ChatPanel() {
+      const [messages, setMessages] = useState([]);
+      const [input, setInput] = useState('');
+      const [sending, setSending] = useState(false);
+      const bottomRef = useRef(null);
+
+      useEffect(() => {
+        bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+      }, [messages, sending]);
+
+      const ask = async (question) => {
+        const q = question.trim();
+        if (!q || sending) return;
+        setMessages((m) => [...m, { role: 'user', content: q }]);
+        setInput('');
+        setSending(true);
+        try {
+          const res = await fetch(`${API}/api/ask`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ question: q }),
+          });
+          const data = await res.json().catch(() => ({}));
+          const answer = res.ok ? data.answer : (data.error || '답변을 가져오지 못했어요.');
+          setMessages((m) => [...m, { role: 'assistant', content: answer }]);
+        } catch (err) {
+          setMessages((m) => [...m, { role: 'assistant', content: '서버에 연결할 수 없어요.' }]);
+        } finally {
+          setSending(false);
+        }
+      };
+
+      const submit = (e) => { e.preventDefault(); ask(input); };
+
+      return (
+        <Card className="flex flex-col h-[calc(100vh-140px)] max-h-[760px] p-0 overflow-hidden">
+          <div className="px-5 py-4 border-b border-slate-100 flex items-center gap-2.5">
+            <span className="text-[20px]">🤖</span>
+            <div>
+              <div className="text-[15px] font-bold text-slate-800">AI 소비 분석가</div>
+              <div className="text-[12px] text-slate-400">가계부 내역을 근거로 답해요. 궁금한 걸 자유롭게 물어보세요.</div>
+            </div>
+          </div>
+
+          <div className="flex-1 overflow-y-auto px-5 py-5 space-y-4">
+            {messages.length === 0 ? (
+              <div className="h-full flex flex-col items-center justify-center text-center px-4">
+                <div className="text-4xl mb-3">💬</div>
+                <div className="text-[14px] font-semibold text-slate-600 mb-1">무엇이든 물어보세요</div>
+                <div className="text-[12.5px] text-slate-400 mb-5">아래 예시 질문을 눌러보거나 직접 입력해보세요.</div>
+                <div className="flex flex-wrap justify-center gap-2 max-w-md">
+                  {SUGGESTED_QUESTIONS.map((q) => (
+                    <button
+                      key={q} onClick={() => ask(q)}
+                      className="px-3 py-1.5 rounded-full text-[12.5px] font-medium bg-white border border-slate-200 text-slate-600 hover:border-slate-400 hover:text-slate-900 transition"
+                    >
+                      {q}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <>
+                {messages.map((m, i) => <ChatBubble key={i} role={m.role} content={m.content} />)}
+                {sending && <ChatBubble role="assistant" pending />}
+              </>
+            )}
+            <div ref={bottomRef} />
+          </div>
+
+          <form onSubmit={submit} className="p-3.5 border-t border-slate-100 flex items-center gap-2">
+            <input
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              placeholder="예: 이번 달 얼마 썼어?"
+              className={`${inputCls} flex-1`}
+              disabled={sending}
+            />
+            <Button type="submit" disabled={sending || !input.trim()} className="shrink-0">
+              보내기
+            </Button>
+          </form>
+        </Card>
+      );
+    }
+
+    // ========================================
+    // 🚀 App
+    // ========================================
+    function App() {
+      const [tab, setTab] = useState('agent');
+      const [month, setMonth] = useState(() => toMonthStr(new Date()));
+      const [entries, setEntries] = useState([]);
+      const [summary, setSummary] = useState(null);
+      const [loading, setLoading] = useState(true);
+      const [submitting, setSubmitting] = useState(false);
+      const [editing, setEditing] = useState(null);
+      const [toDelete, setToDelete] = useState(null);
+      const [deleting, setDeleting] = useState(false);
+      const [toast, setToast] = useState(null);
+      const formRef = useRef(null);
+
+      const flash = useCallback((msg) => {
+        setToast(msg);
+        setTimeout(() => setToast(null), 2200);
+      }, []);
+
+      const load = useCallback(async (m) => {
+        setLoading(true);
+        try {
+          const [eRes, sRes] = await Promise.all([
+            fetch(`${API}/api/entries?month=${m}`),
+            fetch(`${API}/api/summary?month=${m}`),
+          ]);
+          setEntries(await eRes.json());
+          setSummary(await sRes.json());
+        } catch (err) {
+          flash('데이터를 불러오지 못했어요.');
+        } finally {
+          setLoading(false);
+        }
+      }, [flash]);
+
+      useEffect(() => { load(month); }, [month, load]);
+
+      const shift = (delta) => { setEditing(null); setMonth((m) => shiftMonth(m, delta)); };
+      const goToday = () => { setEditing(null); setMonth(toMonthStr(new Date())); };
+
+      // 생성/수정 제출 → 에러 문자열 반환(성공 시 null)
+      const handleSubmit = async (payload) => {
+        setSubmitting(true);
+        try {
+          const url = editing ? `${API}/api/entries/${editing.id}` : `${API}/api/entries`;
+          const method = editing ? 'PUT' : 'POST';
+          const res = await fetch(url, {
+            method,
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+          });
+          const data = await res.json().catch(() => ({}));
+          if (!res.ok) return data.error || '처리에 실패했습니다.';
+
+          // 입력한 달로 이동해서 결과를 보여준다
+          const targetMonth = payload.entry_date.slice(0, 7);
+          setEditing(null);
+          flash(editing ? '내역을 수정했어요.' : '내역을 추가했어요.');
+          if (targetMonth !== month) setMonth(targetMonth);
+          else await load(month);
+          return null;
+        } catch (err) {
+          return '서버에 연결할 수 없습니다.';
+        } finally {
+          setSubmitting(false);
+        }
+      };
+
+      const startEdit = (entry) => {
+        setEditing(entry);
+        if (window.innerWidth < 1024) {
+          formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+      };
+
+      const confirmDelete = async () => {
+        if (!toDelete) return;
+        setDeleting(true);
+        try {
+          const res = await fetch(`${API}/api/entries/${toDelete.id}`, { method: 'DELETE' });
+          if (!res.ok) { flash('삭제하지 못했어요.'); return; }
+          if (editing?.id === toDelete.id) setEditing(null);
+          setToDelete(null);
+          flash('내역을 삭제했어요.');
+          await load(month);
+        } catch (err) {
+          flash('서버에 연결할 수 없습니다.');
+        } finally {
+          setDeleting(false);
+        }
+      };
+
+      return (
+        <div className="min-h-screen">
+          {/* 상단 바 */}
+          <header className="sticky top-0 z-30 bg-slate-100/80 backdrop-blur border-b border-slate-200/70">
+            <div className="max-w-5xl mx-auto px-4 sm:px-6 py-3.5 flex items-center justify-between gap-4 flex-wrap">
+              <div className="flex items-center gap-2">
+                <span className="text-[22px]">📒</span>
+                <span className="text-[16px] font-black text-slate-900 tracking-tight">나의 가계부</span>
+              </div>
+
+              <div className="flex items-center gap-1 p-1 bg-slate-200/60 rounded-full">
+                <button
+                  onClick={() => setTab('agent')}
+                  className={`px-3.5 py-1.5 rounded-full text-[13px] font-bold transition ${tab === 'agent' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                >
+                  🤖 AI 분석가
+                </button>
+                <button
+                  onClick={() => setTab('ledger')}
+                  className={`px-3.5 py-1.5 rounded-full text-[13px] font-bold transition ${tab === 'ledger' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                >
+                  📒 가계부
+                </button>
+              </div>
+
+              {tab === 'ledger' && <MonthNav month={month} onShift={shift} onToday={goToday} />}
+            </div>
+          </header>
+
+          <main className="max-w-5xl mx-auto px-4 sm:px-6 py-6 pb-24">
+            {tab === 'agent' ? (
+              <ChatPanel />
+            ) : (
+              <div className="grid grid-cols-1 lg:grid-cols-[1fr_380px] gap-5 items-start">
+                {/* 왼쪽: 요약 + 리스트 */}
+                <div className="space-y-5 order-2 lg:order-1">
+                  <BalanceHero summary={summary} loading={loading} />
+                  <CategoryChart summary={summary} loading={loading} />
+                  <EntryList
+                    entries={entries} loading={loading} editingId={editing?.id}
+                    onEdit={startEdit} onDelete={setToDelete}
+                  />
+                </div>
+
+                {/* 오른쪽: 입력 폼 (데스크탑 sticky) */}
+                <div ref={formRef} className="order-1 lg:order-2 lg:sticky lg:top-[76px]">
+                  <EntryForm
+                    editing={editing} onSubmit={handleSubmit}
+                    onCancelEdit={() => setEditing(null)} submitting={submitting}
+                  />
+                </div>
+              </div>
+            )}
+          </main>
+
+          <ConfirmModal entry={toDelete} onClose={() => setToDelete(null)} onConfirm={confirmDelete} busy={deleting} />
+
+          {/* 토스트 */}
+          {toast && (
+            <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 animate-fade-up">
+              <div className="bg-slate-900 text-white text-[13.5px] font-medium px-4 py-2.5 rounded-full shadow-lg">
+                {toast}
+              </div>
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    // ========================================
+    // 렌더
+    // ========================================
+    ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+  </script>
+</body>
+</html>

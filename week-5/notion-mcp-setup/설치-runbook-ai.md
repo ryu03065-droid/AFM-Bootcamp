@@ -1,7 +1,7 @@
 # Notion MCP 설치 Runbook (AI 실행용)
 
 > **이 문서는 AI 에이전트가 직접 따라 실행하는 설치 절차서입니다.**
-> 사람이 읽는 설명용 가이드는 → `notion-mcp-설치가이드.md`
+> 사람이 읽는 설명용 가이드는 → `설치가이드.md`
 > Claude Code에 노션을 **OAuth 호스티드 방식**(`mcp.notion.com/mcp`)으로 연결합니다. API 토큰·페이지별 연동 불필요.
 
 ---
