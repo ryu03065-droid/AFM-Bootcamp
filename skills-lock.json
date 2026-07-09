@@ -7,6 +7,18 @@
       "skillPath": "skills/design-consistency-auditor/SKILL.md",
       "computedHash": "11d8889067ee137c8140d7bf0e48be2c4b6a8539243589b5c7d7bc114c38cdef"
     },
+    "find-skills": {
+      "source": "vercel-labs/skills",
+      "sourceType": "github",
+      "skillPath": "skills/find-skills/SKILL.md",
+      "computedHash": "781bd6d3f9b19f8c9af6b53d8d0e4876d0183841b565db34ca7092ffa412d111"
+    },
+    "frontend-design": {
+      "source": "anthropics/skills",
+      "sourceType": "github",
+      "skillPath": "skills/frontend-design/SKILL.md",
+      "computedHash": "4eabc66183767153e404b39d1b839b1c37f2d82d86f0a0d7e880a579d8d62336"
+    },
     "ui-design": {
       "source": "shajith003/awesome-claude-skills",
       "sourceType": "github",

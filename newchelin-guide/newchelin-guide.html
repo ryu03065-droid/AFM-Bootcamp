@@ -1,0 +1,527 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NEWCHELIN GUIDE — 미식 검증소</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Anton&family=Spectral:ital,wght@0,400;0,500;0,600;1,400&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --paper: #FBF7EE;
+    --paper-dim: #F1E7D3;
+    --ink: #1B1B18;
+    --orange: #F35102;
+    --kraft: #E7D9BE;
+    --olive: #6E5A3E;
+    --line: rgba(27,27,24,0.14);
+  }
+
+  *{ box-sizing:border-box; }
+  html{ scroll-behavior:smooth; }
+
+  body{
+    margin:0;
+    background:var(--paper);
+    color:var(--ink);
+    font-family:'Spectral', serif;
+    font-size:17px;
+    line-height:1.7;
+    -webkit-font-smoothing:antialiased;
+  }
+
+  .paper-grain{
+    position:fixed; inset:0; pointer-events:none; z-index:1;
+    opacity:0.05; mix-blend-mode:multiply;
+    background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='120' height='120'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
+  }
+
+  h1,h2,h3,.display{
+    font-family:'Anton', sans-serif;
+    font-weight:400;
+    text-transform:uppercase;
+    letter-spacing:0.01em;
+    margin:0;
+  }
+
+  .mono{ font-family:'IBM Plex Mono', monospace; }
+
+  a{ color:inherit; }
+
+  .eyebrow{
+    font-family:'IBM Plex Mono', monospace;
+    font-size:0.75rem;
+    letter-spacing:0.2em;
+    text-transform:uppercase;
+    color:var(--orange);
+    font-weight:600;
+    display:inline-flex;
+    align-items:center;
+    gap:0.5rem;
+    margin-bottom:1rem;
+  }
+  .eyebrow::before{
+    content:"";
+    width:1.4rem; height:1px; background:var(--orange);
+    display:inline-block;
+  }
+
+  .wrap{ max-width:1120px; margin:0 auto; padding:0 1.5rem; }
+
+  /* ---------- NAV ---------- */
+  .nav{
+    position:sticky; top:0; z-index:40;
+    background:rgba(251,247,238,0.92);
+    backdrop-filter:blur(6px);
+    border-bottom:1px solid var(--line);
+  }
+  .nav__row{
+    max-width:1120px; margin:0 auto; padding:0 1.5rem;
+    height:64px; display:flex; align-items:center; justify-content:space-between;
+  }
+  .nav__mark{ font-size:1.15rem; letter-spacing:0.03em; }
+  .nav__links{ display:flex; gap:2rem; align-items:center; }
+  .nav__link{
+    font-family:'IBM Plex Mono', monospace;
+    font-size:0.8rem; letter-spacing:0.06em;
+    text-decoration:none; color:var(--ink); opacity:0.65;
+    transition:opacity 0.2s ease;
+  }
+  .nav__link:hover, .nav__link:focus-visible{ opacity:1; color:var(--orange); }
+  .nav__cta{
+    font-family:'IBM Plex Mono', monospace;
+    font-size:0.78rem; letter-spacing:0.04em;
+    border:1.5px solid var(--ink); border-radius:2px;
+    padding:0.5rem 1rem; text-decoration:none;
+    transition:background 0.2s ease, color 0.2s ease, border-color 0.2s ease;
+  }
+  .nav__cta:hover, .nav__cta:focus-visible{ background:var(--orange); border-color:var(--orange); color:white; }
+  @media (max-width:720px){ .nav__links{ display:none; } }
+
+  :focus-visible{ outline:2px solid var(--orange); outline-offset:3px; }
+
+  /* ---------- HERO (original Figma asset, respected as-is) ---------- */
+  .hero{
+    position:relative; overflow:hidden;
+    background:var(--orange);
+    min-height:92vh;
+    display:flex; align-items:center; justify-content:center;
+    padding:6rem 1.5rem 4rem;
+    text-align:center;
+  }
+  .hero__glow{
+    position:absolute; left:50%; top:50%; width:200%; max-width:1600px;
+    transform:translate(-50%,-50%);
+    opacity:0.4; mix-blend-mode:color-dodge; pointer-events:none;
+  }
+  .hero__glow img{ width:100%; height:100%; object-fit:cover; display:block; }
+
+  .hero__badge{
+    position:absolute; top:1.75rem; left:1.75rem; width:88px; height:88px;
+    filter:drop-shadow(0 6px 12px rgba(0,0,0,0.25));
+    opacity:0; transform:scale(1.5) rotate(-30deg);
+    animation:stampIn 0.65s cubic-bezier(.2,1.4,.4,1) 0.15s forwards;
+  }
+  .hero__badge img{ width:100%; height:100%; object-fit:contain; }
+  @keyframes stampIn{
+    60%{ opacity:1; transform:scale(0.92) rotate(-6deg); }
+    100%{ opacity:1; transform:scale(1) rotate(-8deg); }
+  }
+
+  .hero__content{ position:relative; z-index:2; max-width:760px; padding-top:1rem; }
+  .hero__eyebrow{
+    font-family:'IBM Plex Mono', monospace; color:white; opacity:0.85;
+    font-size:0.95rem; letter-spacing:0.4em; text-shadow:0 0 15px rgba(0,0,0,0.3);
+  }
+  .hero h1{
+    color:white; line-height:0.92; margin-top:0.4rem;
+    font-size:clamp(3rem, 11vw, 8rem); letter-spacing:0.01em;
+    text-shadow:0 0 15px rgba(0,0,0,0.3);
+  }
+  .hero__sub2{
+    color:white; font-family:'IBM Plex Mono', monospace;
+    font-size:clamp(1.1rem, 3vw, 1.8rem); letter-spacing:0.3em;
+    text-shadow:0 0 15px rgba(0,0,0,0.3); margin-top:0.2rem;
+  }
+  .hero__tagline{
+    color:rgba(255,255,255,0.92); margin-top:1.75rem;
+    font-family:'Spectral', serif; font-style:italic;
+    font-size:clamp(1rem, 1.6vw, 1.3rem);
+    text-shadow:0 0 15px rgba(0,0,0,0.3);
+  }
+  .hero__scroll{
+    margin-top:2.5rem; display:inline-flex; align-items:center; gap:0.6rem;
+    color:white; text-decoration:none; font-family:'IBM Plex Mono', monospace;
+    font-size:0.8rem; letter-spacing:0.06em;
+    border:1px solid rgba(255,255,255,0.5); border-radius:2px;
+    padding:0.6rem 1.1rem; transition:background 0.2s ease, color 0.2s ease;
+  }
+  .hero__scroll:hover, .hero__scroll:focus-visible{ background:white; color:var(--orange); }
+
+  /* ---------- reveal on scroll ---------- */
+  .reveal{ opacity:0; transform:translateY(18px); transition:opacity 0.6s ease, transform 0.6s ease; }
+  .reveal.is-visible{ opacity:1; transform:none; }
+  @media (prefers-reduced-motion:reduce){
+    .reveal{ opacity:1; transform:none; transition:none; }
+    .hero__badge{ animation:none; opacity:1; transform:rotate(-8deg); }
+  }
+
+  /* ---------- SECTION shells ---------- */
+  .section{ position:relative; padding:6rem 0; z-index:2; }
+  .section--dark{ background:var(--ink); color:var(--paper); }
+  .section--dim{ background:var(--paper-dim); }
+
+  /* ---------- ABOUT / CASE BRIEF ---------- */
+  .brief{ display:grid; grid-template-columns:1.1fr 0.9fr; gap:3.5rem; align-items:start; }
+  @media (max-width:860px){ .brief{ grid-template-columns:1fr; } }
+
+  .brief h2{ font-size:clamp(1.8rem,4vw,2.6rem); line-height:1.05; margin-bottom:1.25rem; }
+  .brief p{ color:var(--olive); max-width:46ch; }
+
+  .memo{
+    border:1px solid var(--line); border-radius:2px; padding:1.5rem 1.75rem;
+    background:var(--paper-dim);
+  }
+  .memo__row{
+    display:flex; justify-content:space-between; gap:1rem;
+    padding:0.65rem 0; border-bottom:1px dashed var(--line);
+    font-family:'IBM Plex Mono', monospace; font-size:0.82rem;
+  }
+  .memo__row:last-child{ border-bottom:none; }
+  .memo__label{ color:var(--olive); letter-spacing:0.06em; }
+  .memo__value{ text-align:right; }
+
+  /* ---------- CHECKLIST TICKET ---------- */
+  .ticket{
+    margin-top:3rem;
+    background:var(--paper);
+    border:1px solid var(--line);
+    position:relative;
+    padding:2rem 2rem 1.5rem;
+    clip-path: polygon(
+      0% 6px, 2% 0%, 4% 6px, 6% 0%, 8% 6px, 10% 0%, 12% 6px, 14% 0%, 16% 6px, 18% 0%, 20% 6px, 22% 0%, 24% 6px, 26% 0%, 28% 6px, 30% 0%, 32% 6px, 34% 0%, 36% 6px, 38% 0%, 40% 6px, 42% 0%, 44% 6px, 46% 0%, 48% 6px, 50% 0%, 52% 6px, 54% 0%, 56% 6px, 58% 0%, 60% 6px, 62% 0%, 64% 6px, 66% 0%, 68% 6px, 70% 0%, 72% 6px, 74% 0%, 76% 6px, 78% 0%, 80% 6px, 82% 0%, 84% 6px, 86% 0%, 88% 6px, 90% 0%, 92% 6px, 94% 0%, 96% 6px, 98% 0%, 100% 6px,
+      100% 100%, 0% 100%
+    );
+  }
+  .ticket__list{ list-style:none; margin:0; padding:0; display:grid; gap:1rem; }
+  .ticket__item{
+    display:flex; align-items:flex-start; gap:0.85rem;
+    font-family:'IBM Plex Mono', monospace; font-size:0.9rem;
+  }
+  .ticket__check{
+    flex:none; width:1.1rem; height:1.1rem; margin-top:0.15rem;
+    color:var(--orange); font-weight:600;
+  }
+
+  /* ---------- SERIES INDEX ---------- */
+  .series__head{
+    display:flex; justify-content:space-between; align-items:flex-end; gap:1rem;
+    flex-wrap:wrap; margin-bottom:2.5rem;
+  }
+  .series__head h2{ font-size:clamp(1.6rem,3.4vw,2.2rem); color:var(--paper); }
+  .series__more{
+    font-family:'IBM Plex Mono', monospace; font-size:0.8rem; letter-spacing:0.04em;
+    text-decoration:none; color:rgba(251,247,238,0.65);
+    transition:color 0.2s ease;
+  }
+  .series__more:hover, .series__more:focus-visible{ color:var(--paper); }
+
+  .files{ display:grid; grid-template-columns:repeat(4,1fr); gap:1.5rem; }
+  @media (max-width:980px){ .files{ grid-template-columns:repeat(2,1fr); } }
+  @media (max-width:560px){ .files{ grid-template-columns:1fr; } }
+
+  .file{
+    text-decoration:none; color:var(--paper);
+    background:rgba(251,247,238,0.04);
+    border:1px solid rgba(251,247,238,0.14);
+    padding:1.1rem 1.1rem 1.3rem;
+    display:flex; flex-direction:column; gap:0.9rem;
+    transition:border-color 0.2s ease, transform 0.25s ease;
+  }
+  .file:hover, .file:focus-visible{ border-color:var(--orange); }
+
+  .file__photo{
+    aspect-ratio:4/5; overflow:hidden; position:relative;
+    background:var(--kraft);
+    transform:rotate(var(--tilt,-2deg));
+    transition:transform 0.3s ease;
+  }
+  .file:hover .file__photo, .file:focus-visible .file__photo{ transform:rotate(0deg); }
+  .file__photo img{ width:100%; height:100%; object-fit:cover; display:block; }
+  .file__pin{
+    position:absolute; top:8px; left:50%; transform:translateX(-50%);
+    width:22px; height:8px; background:rgba(251,247,238,0.85);
+    border-radius:1px; box-shadow:0 2px 4px rgba(0,0,0,0.35);
+  }
+  .file__stamp{
+    position:absolute; top:10px; right:10px;
+    font-family:'IBM Plex Mono', monospace; font-size:0.62rem; font-weight:600;
+    letter-spacing:0.08em; text-transform:uppercase;
+    color:var(--orange); border:1.5px solid var(--orange);
+    padding:0.18rem 0.45rem; border-radius:2px;
+    transform:rotate(-8deg);
+    background:rgba(251,247,238,0.9);
+  }
+  .file__stamp--locked{ color:rgba(251,247,238,0.45); border-color:rgba(251,247,238,0.3); background:transparent; }
+
+  .file__no{ font-family:'IBM Plex Mono', monospace; font-size:0.78rem; color:var(--orange); }
+  .file__no--locked{ color:rgba(251,247,238,0.4); }
+  .file__title{ font-family:'Spectral', serif; font-weight:600; font-size:1rem; line-height:1.35; }
+  .file--locked{ opacity:0.55; }
+  .file--locked .file__title{ color:rgba(251,247,238,0.5); }
+
+  /* ---------- SPOTLIGHT ---------- */
+  .spot{ display:grid; grid-template-columns:1fr 1fr; gap:3.5rem; align-items:center; }
+  @media (max-width:860px){ .spot{ grid-template-columns:1fr; } }
+
+  .spot__photo{
+    position:relative; padding:0.6rem; background:var(--paper);
+    box-shadow:0 12px 30px rgba(27,27,24,0.12);
+    transform:rotate(-1.2deg);
+  }
+  .spot__photo img{ width:100%; display:block; aspect-ratio:4/3; object-fit:cover; }
+  .tape{
+    position:absolute; width:74px; height:26px;
+    background:rgba(231,217,190,0.85);
+    box-shadow:0 2px 4px rgba(0,0,0,0.15);
+  }
+  .tape--tl{ top:-12px; left:20px; transform:rotate(-8deg); }
+  .tape--br{ bottom:-12px; right:20px; transform:rotate(-8deg); }
+
+  .spot h2{ font-size:clamp(1.6rem,3.4vw,2.3rem); line-height:1.1; margin-bottom:1.25rem; }
+  .spot p{ color:var(--olive); max-width:48ch; margin-bottom:1.75rem; }
+
+  .receipt{
+    font-family:'IBM Plex Mono', monospace; font-size:0.85rem;
+    background:var(--paper-dim); border:1px dashed var(--line);
+    padding:1.1rem 1.25rem; margin-bottom:1.75rem;
+  }
+  .receipt__row{ display:flex; justify-content:space-between; padding:0.35rem 0; }
+  .receipt__row + .receipt__row{ border-top:1px dotted var(--line); }
+  .receipt__label{ color:var(--olive); }
+
+  .btn{
+    display:inline-flex; align-items:center; gap:0.6rem;
+    font-family:'IBM Plex Mono', monospace; font-size:0.85rem; letter-spacing:0.03em;
+    text-decoration:none; color:white; background:var(--ink);
+    border:1.5px solid var(--ink); border-radius:2px;
+    padding:0.75rem 1.4rem;
+    transition:background 0.2s ease, color 0.2s ease, transform 0.1s ease;
+  }
+  .btn:hover, .btn:focus-visible{ background:var(--orange); border-color:var(--orange); }
+  .btn:active{ transform:scale(0.97); }
+
+  /* ---------- SUBSCRIBE ---------- */
+  .intake{
+    max-width:560px; margin:0 auto; text-align:center;
+    background:var(--paper); border:1.5px dashed var(--ink);
+    padding:3rem 2rem;
+  }
+  .intake h2{ font-size:clamp(1.5rem,3.4vw,2.1rem); margin:0.75rem 0 0.6rem; }
+  .intake p{ color:var(--olive); margin-bottom:2rem; }
+  .intake__form{ display:flex; gap:0.75rem; flex-wrap:wrap; justify-content:center; }
+  .intake__input{
+    flex:1 1 240px; font-family:'IBM Plex Mono', monospace; font-size:0.9rem;
+    padding:0.8rem 1rem; border:1px solid var(--ink); border-radius:2px;
+    background:transparent; color:var(--ink);
+  }
+  .intake__input::placeholder{ color:rgba(27,27,24,0.4); }
+  .intake__input:focus{ outline:2px solid var(--orange); outline-offset:2px; }
+
+  /* ---------- FOOTER ---------- */
+  .footer{
+    padding:2.5rem 0; border-top:1px solid var(--line);
+  }
+  .footer__row{
+    display:flex; justify-content:space-between; align-items:center; gap:1rem; flex-wrap:wrap;
+    font-family:'IBM Plex Mono', monospace; font-size:0.78rem; color:var(--olive);
+  }
+
+  .icon-arrow, .icon-mail{ width:1rem; height:1rem; flex:none; }
+</style>
+</head>
+<body>
+<div class="paper-grain"></div>
+
+<header class="nav">
+  <div class="nav__row">
+    <span class="nav__mark display">NEWCHELIN</span>
+    <nav class="nav__links">
+      <a class="nav__link" href="#about">사건 개요</a>
+      <a class="nav__link" href="#criteria">검증 기준</a>
+      <a class="nav__link" href="#series">지난 편</a>
+      <a class="nav__link" href="#pick">이번 편</a>
+    </nav>
+    <a class="nav__cta" href="#subscribe">구독 신청</a>
+  </div>
+</header>
+
+<!-- HERO — original Figma asset, unmodified -->
+<section class="hero">
+  <div class="hero__glow"><img src="./assets/effect.png" alt=""></div>
+  <div class="hero__badge"><img src="./assets/badge.png" alt="검증 완료 03호"></div>
+
+  <div class="hero__content">
+    <p class="hero__eyebrow">THE</p>
+    <h1>NEWCHELIN</h1>
+    <p class="hero__sub2">GUIDE</p>
+    <p class="hero__tagline">뉴 아이디가 제안하는, 믿을 수 있는 미식 큐레이션</p>
+    <a class="hero__scroll" href="#about">
+      사건 개요 확인하기
+      <svg class="icon-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M12 5v14M5 12l7 7 7-7"/></svg>
+    </a>
+  </div>
+</section>
+
+<!-- ABOUT / CASE BRIEF -->
+<section class="section" id="about">
+  <div class="wrap">
+    <div class="brief reveal">
+      <div>
+        <p class="eyebrow">CASE BRIEF — 사건 개요</p>
+        <h2>아무 후기도 믿기 어려운 시대,<br>직접 확인한 곳만 올립니다</h2>
+        <p>NEWCHELIN GUIDE는 광고비를 받고 쓰는 후기, 알고리즘이 밀어주는 순위에 기대지 않습니다. 매 편 한 가지 주제와 지역을 정해, 취재팀이 신분을 밝히지 않고 방문해 자비로 결제한 곳만 파일에 올립니다.</p>
+      </div>
+      <div class="memo">
+        <div class="memo__row"><span class="memo__label">FILED BY</span><span class="memo__value">뉴 아이디 취재팀</span></div>
+        <div class="memo__row"><span class="memo__label">METHOD</span><span class="memo__value">비공개 방문 · 자비 결제</span></div>
+        <div class="memo__row"><span class="memo__label">기준</span><span class="memo__value">재방문 의사</span></div>
+        <div class="memo__row"><span class="memo__label">STATUS</span><span class="memo__value">진행 중 · 03호 접수</span></div>
+      </div>
+    </div>
+
+    <div class="ticket reveal" id="criteria">
+      <p class="eyebrow" style="margin-bottom:1.25rem;">VERIFICATION CHECKLIST</p>
+      <ul class="ticket__list">
+        <li class="ticket__item"><span class="ticket__check">✓</span>협찬·광고 표기 없이, 취재팀이 직접 결제하고 방문함</li>
+        <li class="ticket__item"><span class="ticket__check">✓</span>메뉴 구성, 가격, 분위기를 방문 당일 기준으로 기록함</li>
+        <li class="ticket__item"><span class="ticket__check">✓</span>재방문할 의사가 있는 곳만 최종 파일에 남김</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- SERIES INDEX -->
+<section class="section section--dark" id="series">
+  <div class="wrap">
+    <div class="series__head reveal">
+      <div>
+        <p class="eyebrow" style="color:var(--orange);">FILE INDEX</p>
+        <h2>지난 편 파일 보기</h2>
+      </div>
+      <a class="series__more" href="#">전체 파일 보기 →</a>
+    </div>
+
+    <div class="files reveal">
+      <a class="file" href="#" style="--tilt:-2deg;">
+        <div class="file__photo">
+          <span class="file__pin"></span>
+          <span class="file__stamp">공개</span>
+          <img src="https://images.unsplash.com/photo-1544025162-d76694265947?w=600&q=80" alt="강남 취재 현장 사진">
+        </div>
+        <span class="file__no">NO. 01</span>
+        <h3 class="file__title" style="text-transform:none; font-family:'Spectral', serif;">강남에서 줄 서는 진짜 이유</h3>
+      </a>
+
+      <a class="file" href="#" style="--tilt:1.5deg;">
+        <div class="file__photo">
+          <span class="file__pin"></span>
+          <span class="file__stamp">공개</span>
+          <img src="https://images.unsplash.com/photo-1414235077428-338989a2e8c0?w=600&q=80" alt="을지로 노포 취재 사진">
+        </div>
+        <span class="file__no">NO. 02</span>
+        <h3 class="file__title" style="text-transform:none; font-family:'Spectral', serif;">을지로, 30년 노포의 비밀</h3>
+      </a>
+
+      <a class="file" href="#pick" style="--tilt:-1deg;">
+        <div class="file__photo">
+          <span class="file__pin"></span>
+          <span class="file__stamp">공개</span>
+          <img src="https://images.unsplash.com/photo-1504674900247-0877df9cc836?w=600&q=80" alt="이번 편 취재 사진">
+        </div>
+        <span class="file__no">NO. 03</span>
+        <h3 class="file__title" style="text-transform:none; font-family:'Spectral', serif;">믿을 수 있는 미식 큐레이션</h3>
+      </a>
+
+      <a class="file file--locked" href="#subscribe" style="--tilt:2deg;">
+        <div class="file__photo" style="display:flex; align-items:center; justify-content:center;">
+          <span class="file__stamp file__stamp--locked">예정</span>
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="rgba(251,247,238,0.4)" stroke-width="1.6"><rect x="4" y="10" width="16" height="10" rx="1"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg>
+        </div>
+        <span class="file__no file__no--locked">NO. 04</span>
+        <h3 class="file__title" style="text-transform:none; font-family:'Spectral', serif;">다음 편, 구독하면 먼저 열람</h3>
+      </a>
+    </div>
+  </div>
+</section>
+
+<!-- SPOTLIGHT -->
+<section class="section" id="pick">
+  <div class="wrap">
+    <div class="spot reveal">
+      <div class="spot__photo">
+        <span class="tape tape--tl"></span>
+        <span class="tape tape--br"></span>
+        <img src="https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=900&q=80" alt="03호 취재 현장 대표 사진">
+      </div>
+      <div>
+        <p class="eyebrow">FILE NO. 03 — 진행 중</p>
+        <h2>이번 편, 다섯 곳을 확인했습니다</h2>
+        <p>한 끼의 선택이 아쉽지 않도록, 이번 편에서는 취재팀이 직접 방문하고 결제한 다섯 곳을 소개합니다. 분위기와 가격, 그리고 재방문 의사까지 모두 기준에 담았습니다.</p>
+        <div class="receipt">
+          <div class="receipt__row"><span class="receipt__label">방문일</span><span>2026. 07. 03 – 07. 08</span></div>
+          <div class="receipt__row"><span class="receipt__label">지출</span><span>자비 결제 · 5건</span></div>
+          <div class="receipt__row"><span class="receipt__label">판정</span><span>전원 재방문 의사 확인</span></div>
+        </div>
+        <a class="btn" href="#">
+          이번 편 전체 보기
+          <svg class="icon-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M5 12h14M13 5l7 7-7 7"/></svg>
+        </a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- SUBSCRIBE -->
+<section class="section section--dim" id="subscribe">
+  <div class="wrap">
+    <div class="intake reveal">
+      <p class="eyebrow" style="justify-content:center;">신청서</p>
+      <h2>새 파일이 열리면<br>가장 먼저 알려드립니다</h2>
+      <p>이메일만 남기면 새 편이 공개될 때 바로 안내해드려요.</p>
+      <form class="intake__form" onsubmit="return false;">
+        <input class="intake__input" type="email" required placeholder="이메일 주소">
+        <button class="btn" type="submit">
+          신청하기
+          <svg class="icon-mail" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/></svg>
+        </button>
+      </form>
+    </div>
+  </div>
+</section>
+
+<footer class="footer">
+  <div class="wrap footer__row">
+    <span class="display" style="font-size:1rem;">NEWCHELIN</span>
+    <span>PAPER TRAIL SINCE 2026 · 03호 접수완료</span>
+  </div>
+</footer>
+
+<script>
+  var reveals = document.querySelectorAll('.reveal');
+  if('IntersectionObserver' in window){
+    var io = new IntersectionObserver(function(entries){
+      entries.forEach(function(entry){
+        if(entry.isIntersecting){
+          entry.target.classList.add('is-visible');
+          io.unobserve(entry.target);
+        }
+      });
+    }, { threshold: 0.15 });
+    reveals.forEach(function(el){ io.observe(el); });
+  } else {
+    reveals.forEach(function(el){ el.classList.add('is-visible'); });
+  }
+</script>
+</body>
+</html>

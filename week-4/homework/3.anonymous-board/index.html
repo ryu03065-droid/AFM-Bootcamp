@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>익명 고민 · 칭찬 게시판</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Jua&family=Gowun+Dodum&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --night:      #232238;
+      --night-2:    #2c2b47;
+      --card:       #302f4e;
+      --paper:      #38375a;
+      --ink:        #ece9ff;
+      --ink-mute:   #a5a2c9;
+      --line:       #45436b;
+
+      --worry:      #8f8bf0;
+      --worry-soft: rgba(143,139,240,0.16);
+      --praise:     #f0a5c0;
+      --praise-soft:rgba(240,165,192,0.16);
+      --cheer:      #7fd6c0;
+      --cheer-soft: rgba(127,214,192,0.16);
+
+      --shadow: rgba(10, 8, 30, 0.35);
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: 100%; }
+    body {
+      font-family: 'Gowun Dodum', 'Apple SD Gothic Neo', sans-serif;
+      color: var(--ink);
+      background:
+        radial-gradient(900px 480px at 15% -10%, rgba(143,139,240,0.14), transparent 60%),
+        radial-gradient(720px 460px at 100% 0%, rgba(240,165,192,0.10), transparent 58%),
+        radial-gradient(760px 520px at 50% 120%, rgba(127,214,192,0.10), transparent 60%),
+        var(--night);
+      min-height: 100vh;
+      -webkit-font-smoothing: antialiased;
+    }
+    .wrap { max-width: 720px; margin: 0 auto; padding: 44px 22px 80px; }
+
+    header { text-align: center; margin-bottom: 30px; }
+    .brand {
+      display: inline-flex; align-items: center; gap: 12px;
+      font-family: 'Jua', sans-serif;
+      font-size: 30px;
+      letter-spacing: -0.5px;
+    }
+    .brand .star { font-size: 26px; }
+    header p { color: var(--ink-mute); margin-top: 8px; font-size: 15px; }
+
+    /* ===== 글쓰기 카드 ===== */
+    .composer {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 20px;
+      padding: 22px;
+      box-shadow: 0 14px 34px var(--shadow);
+      margin-bottom: 34px;
+    }
+    .cat-tabs { display: flex; gap: 8px; margin-bottom: 14px; }
+    .cat-btn {
+      flex: 1;
+      padding: 10px 0;
+      border-radius: 12px;
+      border: 1.5px solid var(--line);
+      background: var(--paper);
+      color: var(--ink-mute);
+      font-family: inherit;
+      font-size: 14.5px;
+      cursor: pointer;
+      transition: all .15s ease;
+    }
+    .cat-btn.active[data-cat="고민"] { background: var(--worry-soft); border-color: var(--worry); color: var(--worry); }
+    .cat-btn.active[data-cat="칭찬"] { background: var(--praise-soft); border-color: var(--praise); color: var(--praise); }
+    .cat-btn.active[data-cat="응원"] { background: var(--cheer-soft); border-color: var(--cheer); color: var(--cheer); }
+
+    textarea {
+      width: 100%;
+      min-height: 90px;
+      resize: vertical;
+      background: var(--paper);
+      border: 1.5px solid var(--line);
+      border-radius: 14px;
+      padding: 14px;
+      color: var(--ink);
+      font-family: inherit;
+      font-size: 15px;
+      line-height: 1.5;
+    }
+    textarea:focus { outline: none; border-color: var(--worry); }
+    textarea::placeholder { color: var(--ink-mute); }
+
+    .composer-foot {
+      display: flex; justify-content: space-between; align-items: center;
+      margin-top: 14px;
+    }
+    .anon-badge {
+      font-size: 13px; color: var(--ink-mute);
+      display: flex; align-items: center; gap: 6px;
+    }
+    .submit-btn {
+      padding: 11px 22px;
+      border: none;
+      border-radius: 12px;
+      background: linear-gradient(135deg, var(--worry), #6d68d6);
+      color: #fff;
+      font-family: 'Jua', sans-serif;
+      font-size: 14.5px;
+      cursor: pointer;
+      box-shadow: 0 6px 16px rgba(143,139,240,0.35);
+    }
+    .submit-btn:disabled { opacity: .5; cursor: not-allowed; }
+
+    /* ===== 정렬 탭 ===== */
+    .sort-tabs {
+      display: flex; gap: 6px; margin-bottom: 18px;
+    }
+    .sort-btn {
+      padding: 8px 16px;
+      border-radius: 999px;
+      border: 1.5px solid var(--line);
+      background: transparent;
+      color: var(--ink-mute);
+      font-family: inherit;
+      font-size: 14px;
+      cursor: pointer;
+    }
+    .sort-btn.active {
+      background: var(--card);
+      border-color: var(--worry);
+      color: var(--ink);
+    }
+
+    /* ===== 게시글 목록 ===== */
+    .post-list { display: flex; flex-direction: column; gap: 14px; }
+    .post-card {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      padding: 18px 20px;
+      box-shadow: 0 10px 24px var(--shadow);
+    }
+    .post-top {
+      display: flex; justify-content: space-between; align-items: center;
+      margin-bottom: 10px;
+    }
+    .tag {
+      font-size: 12.5px;
+      padding: 4px 11px;
+      border-radius: 999px;
+      font-weight: 600;
+    }
+    .tag[data-cat="고민"] { background: var(--worry-soft); color: var(--worry); }
+    .tag[data-cat="칭찬"] { background: var(--praise-soft); color: var(--praise); }
+    .tag[data-cat="응원"] { background: var(--cheer-soft); color: var(--cheer); }
+    .post-time { font-size: 12px; color: var(--ink-mute); }
+
+    .post-content {
+      font-size: 15.5px;
+      line-height: 1.65;
+      white-space: pre-wrap;
+      word-break: break-word;
+      margin-bottom: 12px;
+    }
+    .like-btn {
+      display: inline-flex; align-items: center; gap: 6px;
+      border: 1.5px solid var(--line);
+      background: var(--paper);
+      color: var(--ink-mute);
+      border-radius: 999px;
+      padding: 7px 14px;
+      font-family: inherit;
+      font-size: 13.5px;
+      cursor: pointer;
+      transition: transform .12s ease;
+    }
+    .like-btn:hover { border-color: var(--praise); color: var(--praise); }
+    .like-btn:active { transform: scale(0.94); }
+
+    .empty {
+      text-align: center;
+      color: var(--ink-mute);
+      padding: 50px 0;
+      font-size: 15px;
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <div class="brand"><span class="star">✨</span>익명 고민 · 칭찬 게시판</div>
+      <p>이름 없이, 마음만 남겨보세요</p>
+    </header>
+
+    <section class="composer">
+      <div class="cat-tabs" id="cat-tabs">
+        <button class="cat-btn active" data-cat="고민">😔 고민</button>
+        <button class="cat-btn" data-cat="칭찬">💛 칭찬</button>
+        <button class="cat-btn" data-cat="응원">💪 응원</button>
+      </div>
+      <textarea id="post-content" placeholder="누구에게도 못했던 이야기를 편하게 적어보세요..."></textarea>
+      <div class="composer-foot">
+        <span class="anon-badge">🕶 작성자는 표시되지 않아요</span>
+        <button class="submit-btn" id="submit-btn" onclick="submitPost()">올리기</button>
+      </div>
+    </section>
+
+    <div class="sort-tabs">
+      <button class="sort-btn active" data-sort="latest" onclick="setSort('latest')">🕐 최신순</button>
+      <button class="sort-btn" data-sort="likes" onclick="setSort('likes')">❤️ 공감순</button>
+    </div>
+
+    <div class="post-list" id="post-list"></div>
+  </div>
+
+  <script src="client.js"></script>
+</body>
+</html>

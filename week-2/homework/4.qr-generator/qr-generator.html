@@ -4,73 +4,374 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>QR 코드 생성기</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
   <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
   <script src="https://unpkg.com/@babel/standalone@7.25.9/babel.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
   <style>
-    /* QR preview canvas/img should never overflow its wrapper */
-    #qr-render canvas,
-    #qr-render img {
+    :root {
+      --ink: #16171b;
+      --ink-70: rgba(22, 23, 27, 0.7);
+      --ink-45: rgba(22, 23, 27, 0.45);
+      --ink-15: rgba(22, 23, 27, 0.12);
+      --paper: #f2f4ef;
+      --panel: #fdfdfb;
+      --line: #dee1d8;
+      --signal: #e8432f;
+      --signal-soft: rgba(232, 67, 47, 0.12);
+      --radius: 7px;
+      --mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+      --sans: "IBM Plex Sans", -apple-system, "Segoe UI", sans-serif;
+    }
+
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --ink: #f2f3ee;
+        --ink-70: rgba(242, 243, 238, 0.72);
+        --ink-45: rgba(242, 243, 238, 0.45);
+        --ink-15: rgba(242, 243, 238, 0.14);
+        --paper: #111214;
+        --panel: #191a1d;
+        --line: #303228;
+        --signal: #ff6a52;
+        --signal-soft: rgba(255, 106, 82, 0.14);
+      }
+    }
+
+    * { box-sizing: border-box; }
+
+    html, body {
+      background: var(--paper);
+      color: var(--ink);
+      font-family: var(--sans);
+    }
+
+    body {
+      background-image:
+        radial-gradient(var(--ink-15) 1px, transparent 1px);
+      background-size: 22px 22px;
+    }
+
+    h1, h2, h3, .mono { font-family: var(--mono); }
+    h1 { text-wrap: balance; }
+    .tabular { font-variant-numeric: tabular-nums; }
+
+    :focus-visible {
+      outline: 2px solid var(--signal);
+      outline-offset: 2px;
+    }
+
+    /* ---------- surfaces ---------- */
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+    }
+
+    .eyebrow {
+      font-family: var(--mono);
+      font-size: 0.6875rem;
+      font-weight: 600;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--ink-45);
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5em;
+    }
+
+    .status-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 1px;
+      background: var(--ink-45);
+      display: inline-block;
+    }
+    .status-dot.live {
+      background: var(--signal);
+      animation: pulse 1.6s ease-in-out infinite;
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .status-dot.live { animation: none; }
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.35; }
+    }
+
+    /* ---------- section labels ---------- */
+    .section-label {
+      font-family: var(--mono);
+      font-size: 0.6875rem;
+      font-weight: 600;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--ink-45);
+    }
+
+    /* ---------- mode selector ---------- */
+    .mode-rail {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 2px;
+      background: var(--line);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      overflow: hidden;
+    }
+    .mode-btn {
+      font-family: var(--mono);
+      font-size: 0.72rem;
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      background: var(--panel);
+      color: var(--ink-45);
+      height: 2.5rem;
+      transition: background 0.15s ease, color 0.15s ease;
+    }
+    .mode-btn:hover { color: var(--ink-70); }
+    .mode-btn.active {
+      background: var(--ink);
+      color: var(--paper);
+    }
+
+    /* ---------- fields ---------- */
+    .field-label {
+      display: block;
+      font-size: 0.8rem;
+      font-weight: 500;
+      color: var(--ink-70);
+      margin-bottom: 0.4rem;
+    }
+    .field {
+      width: 100%;
+      height: 2.65rem;
+      border-radius: var(--radius);
+      border: 1px solid var(--line);
+      background: var(--panel);
+      color: var(--ink);
+      padding: 0 0.75rem;
+      font-size: 0.875rem;
+      transition: border-color 0.15s ease;
+    }
+    .field::placeholder { color: var(--ink-45); }
+    .field:focus { border-color: var(--signal); outline: none; }
+    textarea.field {
+      height: auto;
+      padding: 0.65rem 0.75rem;
+      resize: none;
+      line-height: 1.5;
+    }
+
+    .segment-row {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 2px;
+      background: var(--line);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      overflow: hidden;
+    }
+    .segment-btn {
+      height: 2.25rem;
+      font-size: 0.8rem;
+      font-weight: 500;
+      background: var(--panel);
+      color: var(--ink-45);
+      transition: background 0.15s ease, color 0.15s ease;
+    }
+    .segment-btn.active { background: var(--ink); color: var(--paper); }
+
+    .checkline {
+      display: flex;
+      align-items: center;
+      gap: 0.65rem;
+      cursor: pointer;
+      user-select: none;
+      font-size: 0.85rem;
+      color: var(--ink-70);
+    }
+    .checkline input {
+      width: 16px;
+      height: 16px;
+      accent-color: var(--ink);
+    }
+
+    /* ---------- color + size controls ---------- */
+    .swatch-field {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      height: 2.65rem;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: var(--panel);
+      padding: 0 0.5rem;
+    }
+    .swatch-field input[type="color"] {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 1.6rem;
+      height: 1.6rem;
+      padding: 0;
+      border: 1px solid var(--line);
+      border-radius: 3px;
+      background: none;
+      cursor: pointer;
+      flex-shrink: 0;
+    }
+    .swatch-field input[type="color"]::-webkit-color-swatch-wrapper { padding: 0; }
+    .swatch-field input[type="color"]::-webkit-color-swatch { border: none; border-radius: 2px; }
+    .swatch-field input[type="text"] {
+      width: 100%;
+      min-width: 0;
+      height: 100%;
+      background: transparent;
+      border: none;
+      font-family: var(--mono);
+      font-size: 0.8rem;
+      color: var(--ink-70);
+    }
+    .swatch-field input[type="text"]:focus { outline: none; }
+
+    input[type="range"].mod-slider {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 100%;
+      height: 2px;
+      background: var(--line);
+      border-radius: 1px;
+      cursor: pointer;
+    }
+    input[type="range"].mod-slider::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 14px;
+      height: 14px;
+      border-radius: 2px;
+      background: var(--ink);
+      border: none;
+      margin-top: 0;
+    }
+    input[type="range"].mod-slider::-moz-range-thumb {
+      width: 14px;
+      height: 14px;
+      border-radius: 2px;
+      background: var(--ink);
+      border: none;
+    }
+
+    /* ---------- viewfinder ---------- */
+    .viewfinder {
+      position: relative;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: var(--paper);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      padding: 2.5rem 1.5rem;
+      min-height: 280px;
+      overflow: hidden;
+    }
+    .corner {
+      position: absolute;
+      width: 20px;
+      height: 20px;
+      border: 2px solid var(--signal);
+    }
+    .corner.tl { top: 10px; left: 10px; border-right: none; border-bottom: none; }
+    .corner.tr { top: 10px; right: 10px; border-left: none; border-bottom: none; }
+    .corner.bl { bottom: 10px; left: 10px; border-right: none; border-top: none; }
+    .corner.br { bottom: 10px; right: 10px; border-left: none; border-top: none; }
+
+    .qr-stage { position: relative; max-width: 100%; }
+    .qr-stage #qr-render canvas,
+    .qr-stage #qr-render img {
       max-width: 100%;
       height: auto;
       display: block;
+      border-radius: 2px;
     }
-    /* Normalize native color input sizing across browsers */
-    input[type="color"] {
-      -webkit-appearance: none;
-      -moz-appearance: none;
-      appearance: none;
-      padding: 0;
-      border: none;
-      background: none;
-      cursor: pointer;
+
+    .scanline {
+      position: absolute;
+      left: 0;
+      right: 0;
+      top: 0;
+      height: 2px;
+      background: linear-gradient(90deg, transparent, var(--signal), transparent);
     }
-    input[type="color"]::-webkit-color-swatch-wrapper { padding: 0; }
-    input[type="color"]::-webkit-color-swatch { border: none; border-radius: 0.4rem; }
-    input[type="color"]::-moz-color-swatch { border: none; border-radius: 0.4rem; }
+    @media (prefers-reduced-motion: no-preference) {
+      .scanline { animation: sweep 0.9s ease-out; }
+    }
+    @keyframes sweep {
+      0% { top: 0; opacity: 0; }
+      15% { opacity: 1; }
+      100% { top: 100%; opacity: 0; }
+    }
+
+    .empty-state {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0.9rem;
+      color: var(--ink-45);
+      text-align: center;
+      max-width: 220px;
+    }
+
+    /* ---------- buttons ---------- */
+    .btn-primary {
+      height: 2.9rem;
+      width: 100%;
+      border-radius: var(--radius);
+      font-family: var(--mono);
+      font-size: 0.8rem;
+      font-weight: 600;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      background: var(--ink);
+      color: var(--paper);
+      transition: transform 0.1s ease, opacity 0.15s ease;
+    }
+    .btn-primary:active:not(:disabled) { transform: scale(0.98); }
+    .btn-primary:disabled {
+      background: var(--ink-15);
+      color: var(--ink-45);
+      cursor: not-allowed;
+    }
   </style>
 </head>
-<body class="bg-slate-100 text-slate-800">
+<body>
   <div id="root"></div>
 
   <script type="text/babel">
     const { useState, useEffect, useRef, useMemo } = React;
 
-    // ========================================
-    // 🎨 Design System Components
-    // ========================================
+    // ---------- primitives ----------
 
-    function Card({ children, className = "" }) {
-      return (
-        <div className={`bg-white rounded-2xl shadow-sm border border-slate-200 ${className}`}>
-          {children}
-        </div>
-      );
+    function Panel({ children, className = "" }) {
+      return <div className={`panel ${className}`}>{children}</div>;
     }
 
-    function SectionTitle({ children, className = "" }) {
-      return (
-        <h2 className={`text-sm font-semibold text-slate-500 uppercase tracking-wide mb-3 ${className}`}>
-          {children}
-        </h2>
-      );
+    function SectionLabel({ children }) {
+      return <h2 className="section-label mb-3">{children}</h2>;
     }
-
-    // Consistent height for every form control (h-11)
-    const CONTROL = "h-11 w-full rounded-xl border border-slate-300 bg-white px-3 text-sm text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition";
 
     function TextInput({ label, value, onChange, placeholder, type = "text" }) {
       return (
         <label className="block">
-          {label && <span className="mb-1.5 block text-sm font-medium text-slate-700">{label}</span>}
+          {label && <span className="field-label">{label}</span>}
           <input
             type={type}
             value={value}
             onChange={(e) => onChange(e.target.value)}
             placeholder={placeholder}
-            className={CONTROL}
+            className="field"
           />
         </label>
       );
@@ -79,13 +380,13 @@
     function TextArea({ label, value, onChange, placeholder, rows = 4 }) {
       return (
         <label className="block">
-          {label && <span className="mb-1.5 block text-sm font-medium text-slate-700">{label}</span>}
+          {label && <span className="field-label">{label}</span>}
           <textarea
             value={value}
             onChange={(e) => onChange(e.target.value)}
             placeholder={placeholder}
             rows={rows}
-            className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition resize-none"
+            className="field"
           />
         </label>
       );
@@ -94,14 +395,12 @@
     function ColorField({ label, value, onChange }) {
       return (
         <label className="block">
-          <span className="mb-1.5 block text-sm font-medium text-slate-700">{label}</span>
-          {/* Fixed equal-height row: swatch + hex text share h-11 */}
-          <div className="flex h-11 items-center gap-2 rounded-xl border border-slate-300 bg-white px-2">
+          <span className="field-label">{label}</span>
+          <div className="swatch-field">
             <input
               type="color"
               value={value}
               onChange={(e) => onChange(e.target.value)}
-              className="h-7 w-7 shrink-0 rounded-lg"
               aria-label={label}
             />
             <input
@@ -111,63 +410,38 @@
                 const v = e.target.value;
                 if (/^#[0-9a-fA-F]{0,6}$/.test(v)) onChange(v);
               }}
-              className="h-full w-full min-w-0 bg-transparent text-sm font-mono text-slate-700 focus:outline-none"
             />
           </div>
         </label>
       );
     }
 
-    function Button({ children, onClick, disabled = false, className = "" }) {
-      return (
-        <button
-          onClick={onClick}
-          disabled={disabled}
-          className={`h-12 w-full rounded-xl font-semibold text-sm transition focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 ${
-            disabled
-              ? "bg-slate-200 text-slate-400 cursor-not-allowed"
-              : "bg-indigo-600 text-white hover:bg-indigo-700 active:bg-indigo-800 shadow-sm"
-          } ${className}`}
-        >
-          {children}
-        </button>
-      );
-    }
+    // ---------- mode selector ----------
 
-    // ========================================
-    // 🧩 Tabs
-    // ========================================
-
-    const TABS = [
+    const MODES = [
       { id: "url", label: "URL" },
       { id: "text", label: "텍스트" },
       { id: "contact", label: "연락처" },
       { id: "wifi", label: "와이파이" },
     ];
 
-    function Tabs({ active, onChange }) {
+    function ModeRail({ active, onChange }) {
       return (
-        <div className="grid grid-cols-4 gap-1 rounded-xl bg-slate-100 p-1">
-          {TABS.map((t) => (
+        <div className="mode-rail">
+          {MODES.map((m) => (
             <button
-              key={t.id}
-              onClick={() => onChange(t.id)}
-              className={`h-10 rounded-lg text-xs font-semibold transition ${
-                active === t.id
-                  ? "bg-white text-indigo-600 shadow-sm"
-                  : "text-slate-500 hover:text-slate-700"
-              }`}
+              key={m.id}
+              onClick={() => onChange(m.id)}
+              className={`mode-btn ${active === m.id ? "active" : ""}`}
             >
-              {t.label}
+              {m.label}
             </button>
           ))}
         </div>
       );
     }
 
-    // ========================================
-    // 📄 Input Panels
-    // ========================================
+    // ---------- input panels ----------
 
     function UrlForm({ value, onChange }) {
       return (
@@ -199,13 +473,11 @@
         <div className="space-y-4">
           <TextInput label="네트워크 이름 (SSID)" value={wifi.ssid} onChange={set("ssid")} placeholder="WiFi 이름을 입력하세요" />
           <div>
-            <span className="mb-1.5 block text-sm font-medium text-slate-700">보안 방식</span>
-            <div className="grid grid-cols-3 gap-1 rounded-xl bg-slate-100 p-1">
+            <span className="field-label">보안 방식</span>
+            <div className="segment-row">
               {["WPA", "WEP", "없음"].map((v) => (
                 <button key={v} onClick={() => set("security")(v)}
-                  className={`h-9 rounded-lg text-sm font-semibold transition ${
-                    wifi.security === v ? "bg-white text-indigo-600 shadow-sm" : "text-slate-500 hover:text-slate-700"
-                  }`}>
+                  className={`segment-btn ${wifi.security === v ? "active" : ""}`}>
                   {v}
                 </button>
               ))}
@@ -214,10 +486,9 @@
           {wifi.security !== "없음" && (
             <TextInput label="비밀번호" value={wifi.password} onChange={set("password")} placeholder="WiFi 비밀번호" type="password" />
           )}
-          <label className="flex items-center gap-3 cursor-pointer select-none">
-            <input type="checkbox" checked={wifi.hidden} onChange={(e) => set("hidden")(e.target.checked)}
-              className="h-4 w-4 rounded accent-indigo-600" />
-            <span className="text-sm font-medium text-slate-700">숨겨진 네트워크</span>
+          <label className="checkline">
+            <input type="checkbox" checked={wifi.hidden} onChange={(e) => set("hidden")(e.target.checked)} />
+            숨겨진 네트워크
           </label>
         </div>
       );
@@ -238,56 +509,87 @@
       );
     }
 
-    // ========================================
-    // 🖼️ QR Preview
-    // ========================================
+    // ---------- viewfinder / preview ----------
 
-    function QrPreview({ text, size, fg, bg }) {
+    function QrPreview({ text, size, fg, bg, onError }) {
       const containerRef = useRef(null);
+      const [error, setError] = useState(null);
 
       useEffect(() => {
         const el = containerRef.current;
         if (!el) return;
         el.innerHTML = "";
-        if (!text) return;
 
-        new QRCode(el, {
-          text,
-          width: size,
-          height: size,
-          colorDark: fg,
-          colorLight: bg,
-          correctLevel: QRCode.CorrectLevel.M,
-        });
+        if (!text) {
+          setError(null);
+          onError(null);
+          return;
+        }
+
+        try {
+          new QRCode(el, {
+            text,
+            width: size,
+            height: size,
+            colorDark: fg,
+            colorLight: bg,
+            correctLevel: QRCode.CorrectLevel.L,
+          });
+          setError(null);
+          onError(null);
+        } catch (e) {
+          el.innerHTML = "";
+          const msg = "입력한 내용이 너무 길어서 QR 코드를 만들 수 없어요. 내용을 줄여주세요.";
+          setError(msg);
+          onError(msg);
+        }
       }, [text, size, fg, bg]);
 
+      const showQr = Boolean(text) && !error;
+
       return (
-        <div
-          className="mx-auto flex items-center justify-center rounded-2xl bg-slate-50 border border-slate-200 p-4"
-          style={{ maxWidth: "100%", overflow: "hidden" }}
-        >
-          {text ? (
-            <div
-              id="qr-render"
-              ref={containerRef}
-              style={{ maxWidth: "100%", overflow: "hidden" }}
-            />
-          ) : (
-            <div className="flex flex-col items-center justify-center gap-3 py-16 text-slate-400">
-              <svg className="h-12 w-12" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.5">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 4.875c0-.621.504-1.125 1.125-1.125h4.5c.621 0 1.125.504 1.125 1.125v4.5c0 .621-.504 1.125-1.125 1.125h-4.5A1.125 1.125 0 013.75 9.375v-4.5zM3.75 14.625c0-.621.504-1.125 1.125-1.125h4.5c.621 0 1.125.504 1.125 1.125v4.5c0 .621-.504 1.125-1.125 1.125h-4.5a1.125 1.125 0 01-1.125-1.125v-4.5zM13.5 4.875c0-.621.504-1.125 1.125-1.125h4.5c.621 0 1.125.504 1.125 1.125v4.5c0 .621-.504 1.125-1.125 1.125h-4.5A1.125 1.125 0 0113.5 9.375v-4.5z" />
-                <path strokeLinecap="round" strokeLinejoin="round" d="M6.75 6.75h.75v.75h-.75v-.75zM6.75 16.5h.75v.75h-.75v-.75zM16.5 6.75h.75v.75h-.75v-.75zM13.5 13.5h.75v.75h-.75v-.75zM13.5 19.5h.75v.75h-.75v-.75zM19.5 13.5h.75v.75h-.75v-.75zM19.5 19.5h.75v.75h-.75v-.75zM16.5 16.5h.75v.75h-.75v-.75z" />
+        <div className="viewfinder">
+          <span className="corner tl" aria-hidden="true"></span>
+          <span className="corner tr" aria-hidden="true"></span>
+          <span className="corner bl" aria-hidden="true"></span>
+          <span className="corner br" aria-hidden="true"></span>
+
+          {/* Always mounted so the effect can always find its ref, even after an error. */}
+          <div
+            className="qr-stage"
+            key={`${text}|${size}|${fg}|${bg}`}
+            style={{ display: showQr ? "block" : "none" }}
+          >
+            <span className="scanline" aria-hidden="true"></span>
+            <div id="qr-render" ref={containerRef} />
+          </div>
+
+          {error && (
+            <div className="empty-state">
+              <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="var(--signal)" strokeWidth="1.4">
+                <circle cx="12" cy="12" r="9" />
+                <path d="M12 7.5v5.5M12 16.2v.2" />
               </svg>
-              <p className="text-sm">내용을 입력하면 QR 코드가 생성됩니다</p>
+              <p className="text-sm" style={{ color: "var(--signal)" }}>{error}</p>
+            </div>
+          )}
+
+          {!text && !error && (
+            <div className="empty-state">
+              <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.4">
+                <rect x="3.5" y="3.5" width="6" height="6" rx="0.5" />
+                <rect x="14.5" y="3.5" width="6" height="6" rx="0.5" />
+                <rect x="3.5" y="14.5" width="6" height="6" rx="0.5" />
+                <path d="M14.5 14.5h3v3h-3zM20.5 14.5v3M14.5 20.5h6" />
+              </svg>
+              <p className="text-sm">내용을 입력하면 여기에 스캔 가능한 코드가 나타나요</p>
             </div>
           )}
         </div>
       );
     }
 
-    // ========================================
-    // 🚀 App
-    // ========================================
+    // ---------- app ----------
 
     function escapeWifi(s) {
       return String(s).replace(/\\/g, "\\\\").replace(/"/g, '\\"').replace(/;/g, "\\;").replace(/,/g, "\\,");
@@ -325,8 +627,9 @@
       const [wifi, setWifi] = useState({ ssid: "", password: "", security: "WPA", hidden: false });
 
       const [size, setSize] = useState(256);
-      const [fg, setFg] = useState("#1E293B");
-      const [bg, setBg] = useState("#FFFFFF");
+      const [fg, setFg] = useState("#16171b");
+      const [bg, setBg] = useState("#fdfdfb");
+      const [qrError, setQrError] = useState(null);
 
       const qrText = useMemo(() => {
         if (tab === "url") return url.trim();
@@ -336,9 +639,10 @@
       }, [tab, url, text, contact, wifi]);
 
       const hasInput = qrText.length > 0;
+      const canDownload = hasInput && !qrError;
 
       const handleDownload = () => {
-        if (!hasInput) return;
+        if (!canDownload) return;
         const wrapper = document.getElementById("qr-render");
         if (!wrapper) return;
         const canvas = wrapper.querySelector("canvas");
@@ -359,22 +663,26 @@
       };
 
       return (
-        <div className="min-h-screen px-4 py-8 sm:px-6 lg:px-8">
+        <div className="min-h-screen px-4 py-8 sm:px-6 lg:px-10">
           <div className="mx-auto max-w-5xl">
-            {/* Header */}
-            <header className="mb-8 text-center">
-              <h1 className="text-3xl font-bold text-slate-900">QR 코드 생성기</h1>
-              <p className="mt-2 text-sm text-slate-500">URL, 텍스트, 연락처를 QR 코드로 실시간 변환하세요</p>
+
+            <header className="mb-8">
+              <div className="eyebrow mb-3">
+                <span className={`status-dot ${hasInput ? "live" : ""}`}></span>
+                {hasInput ? "encoding" : "standby"}
+              </div>
+              <h1 className="text-3xl sm:text-4xl font-semibold tracking-tight">QR 코드 생성기</h1>
+              <p className="mt-2 text-sm" style={{ color: "var(--ink-70)" }}>
+                URL, 텍스트, 연락처, 와이파이 정보를 입력하면 바로 스캔할 수 있는 코드로 바꿔드려요.
+              </p>
             </header>
 
-            {/* Two-column on desktop, single-column on mobile */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
 
-              {/* Left column: inputs + style */}
               <div className="space-y-6">
-                <Card className="p-5 sm:p-6">
-                  <SectionTitle>입력 유형</SectionTitle>
-                  <Tabs active={tab} onChange={setTab} />
+                <Panel className="p-5 sm:p-6">
+                  <SectionLabel>입력 유형</SectionLabel>
+                  <ModeRail active={tab} onChange={setTab} />
 
                   <div className="mt-5">
                     {tab === "url" && <UrlForm value={url} onChange={setUrl} />}
@@ -382,22 +690,20 @@
                     {tab === "contact" && <ContactForm contact={contact} onChange={setContact} />}
                     {tab === "wifi" && <WifiForm wifi={wifi} onChange={setWifi} />}
                   </div>
-                </Card>
+                </Panel>
 
-                <Card className="p-5 sm:p-6">
-                  <SectionTitle>스타일 설정</SectionTitle>
+                <Panel className="p-5 sm:p-6">
+                  <SectionLabel>스타일 설정</SectionLabel>
 
-                  {/* Equal-width color pair */}
                   <div className="grid grid-cols-2 gap-4">
                     <ColorField label="전경색" value={fg} onChange={setFg} />
                     <ColorField label="배경색" value={bg} onChange={setBg} />
                   </div>
 
-                  {/* Size slider */}
                   <div className="mt-6">
                     <div className="mb-2 flex items-center justify-between">
-                      <span className="text-sm font-medium text-slate-700">크기</span>
-                      <span className="text-sm font-mono text-indigo-600">{size}px</span>
+                      <span className="field-label" style={{ marginBottom: 0 }}>크기</span>
+                      <span className="mono tabular text-sm" style={{ color: "var(--signal)" }}>{size}px</span>
                     </div>
                     <input
                       type="range"
@@ -406,51 +712,54 @@
                       step="8"
                       value={size}
                       onChange={(e) => setSize(Number(e.target.value))}
-                      className="w-full accent-indigo-600 cursor-pointer"
+                      className="mod-slider"
                     />
-                    <div className="mt-1 flex justify-between text-xs text-slate-400">
+                    <div className="mt-2 flex justify-between mono tabular" style={{ fontSize: "0.7rem", color: "var(--ink-45)" }}>
                       <span>128px</span>
                       <span>512px</span>
                     </div>
                   </div>
-                </Card>
+                </Panel>
               </div>
 
-              {/* Right column: preview + download (sticky on desktop) */}
               <div className="lg:sticky lg:top-8 lg:self-start">
-                <Card className="p-5 sm:p-6">
-                  <SectionTitle>미리보기</SectionTitle>
-                  <QrPreview text={qrText} size={size} fg={fg} bg={bg} />
+                <Panel className="p-5 sm:p-6">
+                  <SectionLabel>미리보기</SectionLabel>
+                  <QrPreview text={qrText} size={size} fg={fg} bg={bg} onError={setQrError} />
 
                   <div className="mt-6">
-                    <Button onClick={handleDownload} disabled={!hasInput}>
+                    <button className="btn-primary" onClick={handleDownload} disabled={!canDownload}>
                       <span className="inline-flex items-center justify-center gap-2">
-                        <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                           <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
                         </svg>
                         PNG 다운로드
                       </span>
-                    </Button>
+                    </button>
                     {!hasInput && (
-                      <p className="mt-2 text-center text-xs text-slate-400">내용을 입력하면 다운로드할 수 있습니다</p>
+                      <p className="mt-2 text-center" style={{ fontSize: "0.75rem", color: "var(--ink-45)" }}>
+                        내용을 입력하면 다운로드할 수 있습니다
+                      </p>
+                    )}
+                    {hasInput && qrError && (
+                      <p className="mt-2 text-center" style={{ fontSize: "0.75rem", color: "var(--signal)" }}>
+                        내용을 줄이면 다운로드할 수 있습니다
+                      </p>
                     )}
                   </div>
-                </Card>
+                </Panel>
               </div>
 
             </div>
 
-            <footer className="mt-10 text-center text-xs text-slate-400">
-              실시간 QR 코드 생성기 · qrcode.js + React
+            <footer className="mt-10 mono" style={{ fontSize: "0.7rem", letterSpacing: "0.06em", color: "var(--ink-45)" }}>
+              실시간 QR 코드 생성기 — qrcode.js + React
             </footer>
           </div>
         </div>
       );
     }
 
-    // ========================================
-    // Rendering
-    // ========================================
     ReactDOM.createRoot(document.getElementById("root")).render(<App />);
   </script>
 </body>
