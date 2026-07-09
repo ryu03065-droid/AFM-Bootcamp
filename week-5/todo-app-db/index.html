@@ -1,0 +1,470 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>할 일 목록</title>
+  <script src="https://cdn.tailwindcss.com/3.4.16"></script>
+  <!-- ⚠️ 모든 CDN 버전 고정. @babel/standalone 은 반드시 7.x (8.x 는 인라인 text/babel 깨짐). -->
+  <script src="https://unpkg.com/react@18.3.1/umd/react.development.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone@7.25.9/babel.min.js"></script>
+  <style>
+    @keyframes pop { 0% { transform: scale(0.85); } 60% { transform: scale(1.08); } 100% { transform: scale(1); } }
+    .pop { animation: pop 0.25s ease; }
+    body { -webkit-tap-highlight-color: transparent; }
+  </style>
+</head>
+<body class="bg-slate-100">
+  <div id="root"></div>
+
+  <script type="text/babel">
+    // ========================================
+    // React Hooks
+    // ========================================
+    const { useState, useEffect, useCallback } = React;
+
+    // ========================================
+    // API 설정 (상대경로 — 같은 origin)
+    // ========================================
+    const API_BASE_URL = '/api';
+    const TOKEN_KEY = 'todo_app_db_token';
+    const USER_KEY = 'todo_app_db_user';
+
+    function authFetch(url, options = {}) {
+      const token = localStorage.getItem(TOKEN_KEY);
+      const headers = { ...(options.headers || {}) };
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+      return fetch(url, { ...options, headers });
+    }
+
+    // ========================================
+    // 🎨 Design System Components
+    // ========================================
+    function Spinner({ className = '' }) {
+      return (
+        <svg className={`animate-spin ${className}`} viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.4 0 0 5.4 0 12h4z" />
+        </svg>
+      );
+    }
+
+    function Checkbox({ checked, onClick, disabled }) {
+      return (
+        <button
+          type="button"
+          role="checkbox"
+          aria-checked={checked}
+          disabled={disabled}
+          onClick={onClick}
+          className={`flex-shrink-0 w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all duration-200
+            ${checked
+              ? 'bg-indigo-500 border-indigo-500 text-white'
+              : 'bg-white border-slate-300 hover:border-indigo-400'}
+            ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer active:scale-95'}`}
+        >
+          {checked && (
+            <svg className="w-4 h-4 pop" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+              <path fillRule="evenodd" d="M16.7 5.3a1 1 0 010 1.4l-7.5 7.5a1 1 0 01-1.4 0L3.3 9.7a1 1 0 011.4-1.4l3.3 3.3 6.8-6.8a1 1 0 011.4 0z" clipRule="evenodd" />
+            </svg>
+          )}
+        </button>
+      );
+    }
+
+    // ========================================
+    // 🧩 Todo 항목 컴포넌트
+    // ========================================
+    function TodoItem({ todo, onToggle, onDelete, pending }) {
+      return (
+        <li className="flex items-center gap-3 px-4 py-3.5 group">
+          <Checkbox checked={todo.done} disabled={pending} onClick={() => onToggle(todo.id)} />
+          <span
+            onClick={() => !pending && onToggle(todo.id)}
+            className={`flex-1 text-[15px] leading-snug cursor-pointer select-none transition-colors
+              ${todo.done ? 'line-through text-slate-400' : 'text-slate-700'}`}
+          >
+            {todo.text}
+          </span>
+          {pending && <Spinner className="w-4 h-4 text-indigo-400" />}
+          <button
+            type="button"
+            aria-label="삭제"
+            disabled={pending}
+            onClick={() => onDelete(todo.id)}
+            className={`flex-shrink-0 w-7 h-7 rounded-full flex items-center justify-center text-slate-300
+              hover:text-red-500 hover:bg-red-50 transition sm:opacity-0 sm:group-hover:opacity-100
+              ${pending ? 'opacity-30 cursor-not-allowed' : 'active:scale-90'}`}
+          >
+            <svg className="w-4 h-4" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+              <path fillRule="evenodd" d="M9 2a1 1 0 00-.9.55L7.4 4H4a1 1 0 100 2h12a1 1 0 100-2h-3.4l-.7-1.45A1 1 0 0011 2H9zM5.5 7.5l.6 8.4A2 2 0 008.1 18h3.8a2 2 0 002-1.86l.6-8.64H5.5z" clipRule="evenodd" />
+            </svg>
+          </button>
+        </li>
+      );
+    }
+
+    // ========================================
+    // ➕ 할일 추가 입력폼
+    // ========================================
+    function AddTodoForm({ onAdd, adding }) {
+      const [text, setText] = useState('');
+
+      const submit = (e) => {
+        e.preventDefault();
+        const value = text.trim();
+        if (!value || adding) return;
+        onAdd(value);
+        setText('');
+      };
+
+      return (
+        <form onSubmit={submit} className="flex items-center gap-2 px-4 py-3 border-b border-slate-100 bg-slate-50/60">
+          <input
+            type="text"
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            placeholder="새 할 일을 입력하세요"
+            className="flex-1 px-3 py-2 text-[15px] rounded-xl border border-slate-200 bg-white
+              focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:border-transparent transition"
+          />
+          <button
+            type="submit"
+            disabled={adding || !text.trim()}
+            className="flex-shrink-0 px-4 py-2 rounded-xl bg-indigo-500 text-white text-sm font-semibold
+              hover:bg-indigo-600 active:scale-95 transition disabled:opacity-40 disabled:cursor-not-allowed
+              flex items-center gap-1.5"
+          >
+            {adding ? <Spinner className="w-4 h-4" /> : '추가'}
+          </button>
+        </form>
+      );
+    }
+
+    // ========================================
+    // 🔐 로그인 / 회원가입 화면
+    // ========================================
+    function AuthScreen({ onAuthed }) {
+      const [mode, setMode] = useState('login'); // login | signup
+      const [username, setUsername] = useState('');
+      const [password, setPassword] = useState('');
+      const [error, setError] = useState('');
+      const [submitting, setSubmitting] = useState(false);
+
+      const submit = (e) => {
+        e.preventDefault();
+        if (submitting) return;
+        setError('');
+        setSubmitting(true);
+        const path = mode === 'login' ? 'login' : 'signup';
+        fetch(`${API_BASE_URL}/auth/${path}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username, password }),
+        })
+          .then(async (res) => {
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+            return data;
+          })
+          .then((data) => {
+            localStorage.setItem(TOKEN_KEY, data.token);
+            localStorage.setItem(USER_KEY, JSON.stringify(data.user));
+            onAuthed(data.user);
+          })
+          .catch((err) => setError(err.message || '요청에 실패했어요.'))
+          .finally(() => setSubmitting(false));
+      };
+
+      return (
+        <div className="min-h-screen flex items-center justify-center p-4 sm:p-6">
+          <div className="w-full max-w-sm bg-white rounded-3xl shadow-xl shadow-slate-300/40 overflow-hidden">
+            <header className="px-6 pt-7 pb-5 bg-gradient-to-br from-indigo-500 to-violet-500 text-white">
+              <h1 className="text-2xl font-bold tracking-tight">할 일 목록</h1>
+              <p className="mt-1 text-sm text-indigo-100">
+                {mode === 'login' ? '로그인하고 할 일을 관리하세요.' : '회원가입하고 시작하세요.'}
+              </p>
+            </header>
+
+            <form onSubmit={submit} className="px-6 py-6 space-y-4">
+              <div>
+                <label className="block text-xs font-medium text-slate-500 mb-1">아이디</label>
+                <input
+                  type="text"
+                  value={username}
+                  onChange={(e) => setUsername(e.target.value)}
+                  autoComplete="username"
+                  required
+                  className="w-full px-3 py-2 text-[15px] rounded-xl border border-slate-200 bg-white
+                    focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:border-transparent transition"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-slate-500 mb-1">비밀번호</label>
+                <input
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
+                  required
+                  minLength={4}
+                  className="w-full px-3 py-2 text-[15px] rounded-xl border border-slate-200 bg-white
+                    focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:border-transparent transition"
+                />
+              </div>
+
+              {error && <p className="text-sm text-red-500">{error}</p>}
+
+              <button
+                type="submit"
+                disabled={submitting || !username.trim() || !password}
+                className="w-full px-4 py-2.5 rounded-xl bg-indigo-500 text-white text-sm font-semibold
+                  hover:bg-indigo-600 active:scale-95 transition disabled:opacity-40 disabled:cursor-not-allowed
+                  flex items-center justify-center gap-1.5"
+              >
+                {submitting ? <Spinner className="w-4 h-4" /> : mode === 'login' ? '로그인' : '회원가입'}
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setMode((m) => (m === 'login' ? 'signup' : 'login'));
+                  setError('');
+                }}
+                className="w-full text-center text-xs text-slate-400 hover:text-indigo-500 transition"
+              >
+                {mode === 'login' ? '계정이 없나요? 회원가입' : '이미 계정이 있나요? 로그인'}
+              </button>
+            </form>
+          </div>
+        </div>
+      );
+    }
+
+    // ========================================
+    // 📄 메인 페이지 — TodoApp
+    // ========================================
+    function TodoApp({ user, onLogout }) {
+      const [todos, setTodos] = useState([]);
+      const [status, setStatus] = useState('loading'); // loading | success | error
+      const [pendingIds, setPendingIds] = useState({}); // { [id]: true }
+      const [adding, setAdding] = useState(false);
+
+      // --- 목록 불러오기 ---
+      const loadTodos = useCallback(() => {
+        setStatus('loading');
+        authFetch(`${API_BASE_URL}/todos`)
+          .then((res) => {
+            if (res.status === 401) {
+              onLogout();
+              throw new Error('세션이 만료되었습니다.');
+            }
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            return res.json();
+          })
+          .then((data) => {
+            setTodos(Array.isArray(data) ? data : []);
+            setStatus('success');
+          })
+          .catch(() => setStatus('error'));
+      }, [onLogout]);
+
+      useEffect(() => { loadTodos(); }, [loadTodos]);
+
+      // --- 토글 (optimistic → 응답 확정, 실패 시 롤백) ---
+      const handleToggle = useCallback((id) => {
+        setPendingIds((p) => ({ ...p, [id]: true }));
+
+        // optimistic update
+        setTodos((prev) => prev.map((t) => (t.id === id ? { ...t, done: !t.done } : t)));
+
+        authFetch(`${API_BASE_URL}/todos/${id}/toggle`, { method: 'POST' })
+          .then((res) => {
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            return res.json();
+          })
+          .then((updated) => {
+            // 서버 응답으로 확정
+            setTodos((prev) => prev.map((t) => (t.id === id ? { ...t, ...updated } : t)));
+          })
+          .catch(() => {
+            // 롤백
+            setTodos((prev) => prev.map((t) => (t.id === id ? { ...t, done: !t.done } : t)));
+          })
+          .finally(() => {
+            setPendingIds((p) => {
+              const next = { ...p };
+              delete next[id];
+              return next;
+            });
+          });
+      }, []);
+
+      // --- 추가 ---
+      const handleAdd = useCallback((text) => {
+        setAdding(true);
+        authFetch(`${API_BASE_URL}/todos`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ text }),
+        })
+          .then((res) => {
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            return res.json();
+          })
+          .then((created) => {
+            setTodos((prev) => [...prev, created]);
+          })
+          .catch(() => alert('할 일을 추가하지 못했어요.'))
+          .finally(() => setAdding(false));
+      }, []);
+
+      // --- 삭제 (optimistic → 실패 시 롤백) ---
+      const handleDelete = useCallback((id) => {
+        let snapshot;
+        setPendingIds((p) => ({ ...p, [id]: true }));
+        setTodos((prev) => {
+          snapshot = prev;
+          return prev.filter((t) => t.id !== id);
+        });
+
+        authFetch(`${API_BASE_URL}/todos/${id}`, { method: 'DELETE' })
+          .then((res) => {
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          })
+          .catch(() => {
+            // 롤백
+            if (snapshot) setTodos(snapshot);
+            alert('삭제하지 못했어요.');
+          })
+          .finally(() => {
+            setPendingIds((p) => {
+              const next = { ...p };
+              delete next[id];
+              return next;
+            });
+          });
+      }, []);
+
+      const doneCount = todos.filter((t) => t.done).length;
+      const totalCount = todos.length;
+      const progress = totalCount ? (doneCount / totalCount) * 100 : 0;
+
+      return (
+        <div className="min-h-screen flex items-start sm:items-center justify-center p-4 sm:p-6">
+          <div className="w-full max-w-md">
+            <div className="bg-white rounded-3xl shadow-xl shadow-slate-300/40 overflow-hidden">
+              {/* 헤더 */}
+              <header className="px-6 pt-7 pb-5 bg-gradient-to-br from-indigo-500 to-violet-500 text-white">
+                <div className="flex items-center justify-between">
+                  <h1 className="text-2xl font-bold tracking-tight">할 일 목록</h1>
+                  <button
+                    type="button"
+                    onClick={onLogout}
+                    className="text-xs font-medium text-indigo-100 hover:text-white transition"
+                  >
+                    {user?.username} · 로그아웃
+                  </button>
+                </div>
+                <div className="mt-4 flex items-center justify-between">
+                  <p className="text-sm text-indigo-100">
+                    <span className="font-semibold text-white">{doneCount}</span>
+                    <span className="mx-1">/</span>
+                    <span className="font-semibold text-white">{totalCount}</span>
+                    <span className="ml-1">완료</span>
+                  </p>
+                  <span className="text-xs font-medium text-indigo-100">{Math.round(progress)}%</span>
+                </div>
+                <div className="mt-2 h-2 w-full rounded-full bg-white/25 overflow-hidden">
+                  <div
+                    className="h-full rounded-full bg-white transition-all duration-500 ease-out"
+                    style={{ width: `${progress}%` }}
+                  />
+                </div>
+              </header>
+
+              {/* 추가 입력폼 — 로딩/에러가 아닐 때 표시 */}
+              {status === 'success' && <AddTodoForm onAdd={handleAdd} adding={adding} />}
+
+              {/* 본문 */}
+              <main className="min-h-[200px]">
+                {status === 'loading' && (
+                  <div className="flex flex-col items-center justify-center py-16 text-slate-400">
+                    <Spinner className="w-8 h-8 text-indigo-400" />
+                    <p className="mt-3 text-sm">불러오는 중…</p>
+                  </div>
+                )}
+
+                {status === 'error' && (
+                  <div className="flex flex-col items-center justify-center py-16 px-6 text-center">
+                    <div className="w-12 h-12 rounded-full bg-red-50 flex items-center justify-center text-red-500 text-2xl">⚠️</div>
+                    <p className="mt-3 text-sm text-slate-600">목록을 불러오지 못했어요.</p>
+                    <button
+                      onClick={loadTodos}
+                      className="mt-4 px-5 py-2 rounded-full bg-indigo-500 text-white text-sm font-medium hover:bg-indigo-600 active:scale-95 transition"
+                    >
+                      다시 시도
+                    </button>
+                  </div>
+                )}
+
+                {status === 'success' && totalCount === 0 && (
+                  <div className="flex flex-col items-center justify-center py-16 text-center text-slate-400">
+                    <div className="text-4xl">🎉</div>
+                    <p className="mt-3 text-sm">할 일이 없어요.</p>
+                  </div>
+                )}
+
+                {status === 'success' && totalCount > 0 && (
+                  <ul className="divide-y divide-slate-100">
+                    {todos.map((todo) => (
+                      <TodoItem
+                        key={todo.id}
+                        todo={todo}
+                        onToggle={handleToggle}
+                        onDelete={handleDelete}
+                        pending={!!pendingIds[todo.id]}
+                      />
+                    ))}
+                  </ul>
+                )}
+              </main>
+            </div>
+
+            <p className="mt-4 text-center text-xs text-slate-400">
+              항목을 눌러 완료/미완료를 전환하세요.
+            </p>
+          </div>
+        </div>
+      );
+    }
+
+    // ========================================
+    // 🚪 Root — 로그인 상태에 따라 화면 전환
+    // ========================================
+    function Root() {
+      const [user, setUser] = useState(() => {
+        const raw = localStorage.getItem(USER_KEY);
+        return raw ? JSON.parse(raw) : null;
+      });
+
+      const handleLogout = useCallback(() => {
+        localStorage.removeItem(TOKEN_KEY);
+        localStorage.removeItem(USER_KEY);
+        setUser(null);
+      }, []);
+
+      if (!user) {
+        return <AuthScreen onAuthed={setUser} />;
+      }
+      return <TodoApp user={user} onLogout={handleLogout} />;
+    }
+
+    // ========================================
+    // 🚀 Rendering
+    // ========================================
+    ReactDOM.createRoot(document.getElementById('root')).render(<Root />);
+  </script>
+</body>
+</html>

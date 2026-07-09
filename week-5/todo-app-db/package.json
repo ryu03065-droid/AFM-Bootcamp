@@ -1,0 +1,16 @@
+{
+  "name": "todo-app-db",
+  "version": "1.0.0",
+  "private": true,
+  "type": "commonjs",
+  "description": "Todo app backed by Postgres (Supabase pooler)",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "bcryptjs": "^3.0.3",
+    "jsonwebtoken": "^9.0.3",
+    "postgres": "^3.4.5"
+  }
+}

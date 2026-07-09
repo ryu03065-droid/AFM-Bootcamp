@@ -1,0 +1,23 @@
+{
+  "version": 1,
+  "skills": {
+    "design-consistency-auditor": {
+      "source": "shipshitdev/library",
+      "sourceType": "github",
+      "skillPath": "skills/design-consistency-auditor/SKILL.md",
+      "computedHash": "11d8889067ee137c8140d7bf0e48be2c4b6a8539243589b5c7d7bc114c38cdef"
+    },
+    "ui-design": {
+      "source": "shajith003/awesome-claude-skills",
+      "sourceType": "github",
+      "skillPath": "ui-design/SKILL.md",
+      "computedHash": "841ae21b87a7e12a46fe036051a6d94447fc41f6cf520872736c40870c61cc6c"
+    },
+    "web-design-guidelines": {
+      "source": "vercel-labs/agent-skills",
+      "sourceType": "github",
+      "skillPath": "skills/web-design-guidelines/SKILL.md",
+      "computedHash": "f3bc47f890f42a44db1007ab390709ec368e4b8c089baee6b0007182236ac474"
+    }
+  }
+}
