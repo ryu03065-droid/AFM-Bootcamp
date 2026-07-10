@@ -1,0 +1,956 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>오늘 뭐 먹었어요</title>
+
+  <!-- ⚠️ CDN 버전 고정. @babel/standalone 8.x 는 인라인 text/babel 을 깨뜨리므로 7.25.9 유지 -->
+  <script src="https://cdn.tailwindcss.com/3.4.16"></script>
+  <script src="https://unpkg.com/react@18.3.1/umd/react.development.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone@7.25.9/babel.min.js"></script>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans+KR:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+
+  <style>
+    /* ============================================================
+       디자인 토큰 — "엔지니어링 페이퍼" 라이트 테마
+       코드 에디터 / 주석 문화를 밝고 담백하게 번역
+       ============================================================ */
+    :root {
+      --paper:      #edeee9;   /* 배경: 차가운 오트 페이퍼 */
+      --paper-2:    #e4e6df;   /* 배경 음영 */
+      --surface:    #f8f9f5;   /* 카드 표면 (거의 흰색) */
+      --surface-2:  #fbfcf9;   /* 인풋 표면 */
+      --ink:        #18211d;   /* 딥 파인 잉크 (텍스트/기본버튼) */
+      --ink-soft:   #56605a;   /* 보조 텍스트 */
+      --ink-faint:  #8a938c;   /* 흐린 메타 텍스트 */
+      --line:       #d7dad0;   /* 경계선 */
+      --line-soft:  #e2e4dc;
+
+      --free:       #4b5bd4;   /* 자유 — string blue */
+      --free-bg:    #eaecfb;
+      --question:   #b67b21;   /* 질문 — warning amber */
+      --question-bg:#f6edda;
+      --review:     #2c9c7e;   /* 후기 — success green */
+      --review-bg:  #e2f2ec;
+      --coral:      #e0605a;   /* 공감 하트 */
+      --coral-bg:   #fbe7e5;
+
+      --focus:      #4b5bd4;
+      --shadow:     0 1px 2px rgba(24,33,29,.05), 0 8px 24px rgba(24,33,29,.06);
+      --shadow-lg:  0 12px 40px rgba(24,33,29,.14);
+    }
+
+    * { box-sizing: border-box; }
+    html, body { height: 100%; }
+    body {
+      margin: 0;
+      font-family: 'IBM Plex Sans KR', -apple-system, sans-serif;
+      color: var(--ink);
+      background:
+        radial-gradient(1000px 520px at 12% -8%, rgba(75,91,212,.05), transparent 60%),
+        radial-gradient(820px 480px at 100% 0%, rgba(44,156,126,.05), transparent 58%),
+        var(--paper);
+      background-attachment: fixed;
+      -webkit-font-smoothing: antialiased;
+      line-height: 1.5;
+    }
+    .mono { font-family: 'IBM Plex Mono', monospace; }
+
+    /* 블링킹 커서 */
+    @keyframes blink { 0%,49% { opacity: 1; } 50%,100% { opacity: 0; } }
+    .cursor { display: inline-block; width: .5ch; background: currentColor; animation: blink 1.1s step-end infinite; }
+
+    @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+    @keyframes popIn  { from { opacity: 0; transform: translateY(8px) scale(.985); } to { opacity: 1; transform: none; } }
+    .anim-fade { animation: fadeIn .18s ease both; }
+    .anim-pop  { animation: popIn .2s cubic-bezier(.2,.8,.2,1) both; }
+
+    /* 포커스 링 (접근성) */
+    :focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; border-radius: 6px; }
+
+    @media (prefers-reduced-motion: reduce) {
+      .cursor { animation: none; }
+      .anim-fade, .anim-pop { animation: none; }
+      * { scroll-behavior: auto !important; }
+    }
+
+    /* 커스텀 스크롤바 (상세 본문) */
+    .scroll-ink::-webkit-scrollbar { width: 8px; }
+    .scroll-ink::-webkit-scrollbar-thumb { background: var(--line); border-radius: 8px; }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+
+  <script type="text/babel">
+    const { useState, useEffect, useRef, useCallback } = React;
+
+    // ============================================================
+    // 상수 & 유틸
+    // ============================================================
+    const API_BASE = '/api';
+    const TOKEN_KEY = 'community_app_token';
+    const USER_KEY  = 'community_app_user';
+
+    const CATEGORIES = [
+      { key: '맛집', label: '맛집', icon: '🍽️', hint: '오늘 다녀온 맛집 추천' },
+      { key: '레시피', label: '레시피', icon: '🍳', hint: '직접 만든 요리 공유' },
+      { key: '자유', label: '자유', icon: '💬', hint: '음식 잡담 · 질문' },
+    ];
+    const catMeta = (k) => CATEGORIES.find((c) => c.key === k) || CATEGORIES[0];
+
+    // 카테고리별 색상 변수명
+    const CAT_VAR = { '맛집': 'question', '레시피': 'review', '자유': 'free' };
+
+    function timeAgo(dateStr) {
+      const diff = Date.now() - new Date(dateStr).getTime();
+      const min = Math.floor(diff / 60000);
+      if (min < 1) return '방금 전';
+      if (min < 60) return `${min}분 전`;
+      const hour = Math.floor(min / 60);
+      if (hour < 24) return `${hour}시간 전`;
+      const day = Math.floor(hour / 24);
+      if (day < 7) return `${day}일 전`;
+      return new Date(dateStr).toLocaleDateString('ko-KR', { month: 'long', day: 'numeric' });
+    }
+
+    // 인증 포함 fetch — 401 이면 onUnauthorized 콜백 실행 후 throw
+    async function authFetch(path, options = {}, onUnauthorized) {
+      const token = localStorage.getItem(TOKEN_KEY);
+      const headers = { ...(options.headers || {}) };
+      if (token) headers.Authorization = `Bearer ${token}`;
+      const res = await fetch(API_BASE + path, { ...options, headers });
+      if (res.status === 401) {
+        if (onUnauthorized) onUnauthorized();
+        throw new Error('세션이 만료되었어요. 다시 로그인해 주세요.');
+      }
+      return res;
+    }
+
+    // ============================================================
+    // 🎨 디자인 시스템 — 순수 프레젠테이션 컴포넌트
+    // ============================================================
+
+    // 카테고리 구문 토큰 (모노 · 브래킷 · 컬러 도트)
+    function CatToken({ category, size = 'md' }) {
+      const v = CAT_VAR[category] || 'free';
+      const pad = size === 'sm' ? '2px 8px' : '3px 10px';
+      const fs  = size === 'sm' ? '11.5px' : '12.5px';
+      return (
+        <span
+          className="mono"
+          style={{
+            display: 'inline-flex', alignItems: 'center', gap: '6px',
+            padding: pad, fontSize: fs, fontWeight: 500, lineHeight: 1,
+            borderRadius: '7px', flexShrink: 0, whiteSpace: 'nowrap',
+            color: `var(--${v})`, background: `var(--${v}-bg)`,
+          }}
+        >
+          <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: `var(--${v})` }} />
+          [{category}]
+        </span>
+      );
+    }
+
+    function Button({ variant = 'primary', size = 'md', className = '', style = {}, children, ...rest }) {
+      const base = {
+        display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '7px',
+        fontFamily: 'inherit', fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap',
+        border: '1px solid transparent', borderRadius: '11px',
+        transition: 'transform .1s ease, background .12s ease, border-color .12s ease, color .12s ease',
+      };
+      const sizes = {
+        sm: { padding: '7px 13px', fontSize: '13px' },
+        md: { padding: '10px 18px', fontSize: '14px' },
+        lg: { padding: '13px 20px', fontSize: '15px' },
+      };
+      const variants = {
+        primary: { background: 'var(--ink)', color: '#fff', borderColor: 'var(--ink)' },
+        accent:  { background: 'var(--free)', color: '#fff', borderColor: 'var(--free)' },
+        outline: { background: 'transparent', color: 'var(--ink)', borderColor: 'var(--line)' },
+        ghost:   { background: 'transparent', color: 'var(--ink-soft)', borderColor: 'transparent' },
+        danger:  { background: 'transparent', color: 'var(--coral)', borderColor: 'var(--line)' },
+      };
+      return (
+        <button
+          className={`btn-${variant} ${className}`}
+          style={{ ...base, ...sizes[size], ...variants[variant], ...style }}
+          {...rest}
+        >
+          {children}
+        </button>
+      );
+    }
+
+    function Field({ label, hint, error, children }) {
+      return (
+        <label style={{ display: 'block', marginBottom: '15px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '7px' }}>
+            <span className="mono" style={{ fontSize: '12px', color: 'var(--ink-soft)', fontWeight: 500 }}>{label}</span>
+            {hint && <span style={{ fontSize: '11.5px', color: 'var(--ink-faint)' }}>{hint}</span>}
+          </div>
+          {children}
+          {error && <p style={{ color: 'var(--coral)', fontSize: '12.5px', marginTop: '6px' }}>{error}</p>}
+        </label>
+      );
+    }
+
+    const inputStyle = {
+      width: '100%', background: 'var(--surface-2)', border: '1.5px solid var(--line)',
+      borderRadius: '11px', padding: '11px 13px', color: 'var(--ink)',
+      fontFamily: 'inherit', fontSize: '15px', outline: 'none',
+      transition: 'border-color .12s ease, box-shadow .12s ease',
+    };
+    function TextInput(props) {
+      return (
+        <input
+          {...props}
+          style={{ ...inputStyle, ...(props.style || {}) }}
+          onFocus={(e) => { e.target.style.borderColor = 'var(--focus)'; e.target.style.boxShadow = '0 0 0 3px rgba(75,91,212,.12)'; }}
+          onBlur={(e) => { e.target.style.borderColor = 'var(--line)'; e.target.style.boxShadow = 'none'; }}
+        />
+      );
+    }
+    function TextArea(props) {
+      return (
+        <textarea
+          {...props}
+          style={{ ...inputStyle, minHeight: '96px', resize: 'vertical', lineHeight: 1.6, ...(props.style || {}) }}
+          onFocus={(e) => { e.target.style.borderColor = 'var(--focus)'; e.target.style.boxShadow = '0 0 0 3px rgba(75,91,212,.12)'; }}
+          onBlur={(e) => { e.target.style.borderColor = 'var(--line)'; e.target.style.boxShadow = 'none'; }}
+        />
+      );
+    }
+
+    // 카테고리 세그먼트 선택기
+    function CategoryPicker({ value, onChange }) {
+      return (
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px' }}>
+          {CATEGORIES.map((c) => {
+            const active = value === c.key;
+            const v = CAT_VAR[c.key];
+            return (
+              <button
+                key={c.key}
+                type="button"
+                onClick={() => onChange(c.key)}
+                aria-pressed={active}
+                style={{
+                  padding: '11px 6px', borderRadius: '11px', cursor: 'pointer',
+                  fontFamily: 'inherit', fontSize: '14px', fontWeight: 500,
+                  border: `1.5px solid ${active ? `var(--${v})` : 'var(--line)'}`,
+                  background: active ? `var(--${v}-bg)` : 'var(--surface-2)',
+                  color: active ? `var(--${v})` : 'var(--ink-soft)',
+                  transition: 'all .12s ease',
+                }}
+              >
+                <span style={{ marginRight: '5px' }}>{c.icon}</span>{c.label}
+              </button>
+            );
+          })}
+        </div>
+      );
+    }
+
+    // 모달 (백드롭 + 카드)
+    function Modal({ open, onClose, children, maxWidth = 460 }) {
+      useEffect(() => {
+        if (!open) return;
+        const onKey = (e) => { if (e.key === 'Escape') onClose(); };
+        window.addEventListener('keydown', onKey);
+        document.body.style.overflow = 'hidden';
+        return () => { window.removeEventListener('keydown', onKey); document.body.style.overflow = ''; };
+      }, [open, onClose]);
+      if (!open) return null;
+      return (
+        <div
+          className="anim-fade"
+          onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+          style={{
+            position: 'fixed', inset: 0, zIndex: 50, padding: '20px',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            background: 'rgba(24,33,29,.42)', backdropFilter: 'blur(3px)',
+          }}
+        >
+          <div
+            className="anim-pop"
+            role="dialog" aria-modal="true"
+            style={{
+              width: '100%', maxWidth: `${maxWidth}px`,
+              background: 'var(--surface)', border: '1px solid var(--line)',
+              borderRadius: '20px', boxShadow: 'var(--shadow-lg)',
+              maxHeight: '90vh', display: 'flex', flexDirection: 'column',
+            }}
+          >
+            {children}
+          </div>
+        </div>
+      );
+    }
+
+    // 브랜드 로고마크
+    function Brand({ size = 'md' }) {
+      const box = size === 'lg' ? 40 : 34;
+      const font = size === 'lg' ? '24px' : '20px';
+      return (
+        <div style={{ display: 'inline-flex', alignItems: 'center', gap: '11px' }}>
+          <span
+            className="mono"
+            style={{
+              width: box, height: box, borderRadius: '10px', flexShrink: 0,
+              background: 'var(--ink)', color: 'var(--paper)',
+              display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+              fontSize: box * 0.42, fontWeight: 600, letterSpacing: '-.5px',
+            }}
+          >{'</>'}</span>
+          <span style={{ fontSize: font, fontWeight: 700, letterSpacing: '-.4px' }}>
+            오늘 뭐 먹었어요<span className="cursor" style={{ height: '0.9em', marginLeft: '2px', verticalAlign: '-1px' }} />
+          </span>
+        </div>
+      );
+    }
+
+    // ============================================================
+    // 📄 인증 화면 (로그인 / 회원가입)
+    // ============================================================
+    function AuthScreen({ onAuthed }) {
+      const [mode, setMode] = useState('login'); // login | signup
+      const [username, setUsername] = useState('');
+      const [password, setPassword] = useState('');
+      const [nickname, setNickname] = useState('');
+      const [error, setError] = useState('');
+      const [busy, setBusy] = useState(false);
+      const isSignup = mode === 'signup';
+
+      function switchMode() {
+        setMode(isSignup ? 'login' : 'signup');
+        setError('');
+      }
+
+      async function submit(e) {
+        e.preventDefault();
+        if (busy) return;
+        setError('');
+        if (!username.trim() || !password) {
+          setError('아이디와 비밀번호를 입력해 주세요.');
+          return;
+        }
+        if (isSignup && !nickname.trim()) {
+          setError('게시판에 표시될 닉네임을 입력해 주세요.');
+          return;
+        }
+        setBusy(true);
+        try {
+          const path = isSignup ? '/auth/signup' : '/auth/login';
+          const body = isSignup
+            ? { username: username.trim(), password, nickname: nickname.trim() }
+            : { username: username.trim(), password };
+          const res = await fetch(API_BASE + path, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body),
+          });
+          const data = await res.json();
+          if (!res.ok) throw new Error(data.error || '요청을 처리하지 못했어요.');
+          localStorage.setItem(TOKEN_KEY, data.token);
+          localStorage.setItem(USER_KEY, JSON.stringify(data.user));
+          onAuthed(data.user);
+        } catch (err) {
+          setError(err.message);
+        } finally {
+          setBusy(false);
+        }
+      }
+
+      return (
+        <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px' }}>
+          <div style={{ width: '100%', maxWidth: '400px' }}>
+            <div style={{ textAlign: 'center', marginBottom: '26px' }}>
+              <div style={{ display: 'inline-flex' }}><Brand size="lg" /></div>
+              <p className="mono" style={{ marginTop: '14px', fontSize: '13px', color: 'var(--ink-faint)' }}>
+                // 맛집과 요리를 나누는 기록
+              </p>
+            </div>
+
+            <form
+              onSubmit={submit}
+              style={{
+                background: 'var(--surface)', border: '1px solid var(--line)',
+                borderRadius: '20px', padding: '26px 24px 24px', boxShadow: 'var(--shadow)',
+              }}
+            >
+              <div className="mono" style={{ fontSize: '12.5px', color: 'var(--free)', marginBottom: '18px', fontWeight: 500 }}>
+                {isSignup ? '// 새 계정 만들기' : '// 로그인'}
+              </div>
+
+              <Field label="아이디">
+                <TextInput
+                  type="text" value={username} autoComplete="username"
+                  onChange={(e) => setUsername(e.target.value)} placeholder="username"
+                />
+              </Field>
+
+              {isSignup && (
+                <Field label="닉네임" hint="게시판에 표시돼요">
+                  <TextInput
+                    type="text" value={nickname} autoComplete="nickname"
+                    onChange={(e) => setNickname(e.target.value)} placeholder="표시될 이름"
+                  />
+                </Field>
+              )}
+
+              <Field label="비밀번호" hint="4자 이상">
+                <TextInput
+                  type="password" value={password} autoComplete={isSignup ? 'new-password' : 'current-password'}
+                  onChange={(e) => setPassword(e.target.value)} placeholder="••••••••"
+                />
+              </Field>
+
+              {error && (
+                <p style={{ color: 'var(--coral)', fontSize: '13px', margin: '2px 0 14px', display: 'flex', gap: '6px' }}>
+                  <span className="mono">!</span>{error}
+                </p>
+              )}
+
+              <Button type="submit" variant="primary" size="lg" disabled={busy}
+                style={{ width: '100%', marginTop: '4px', opacity: busy ? 0.6 : 1 }}>
+                {busy ? '처리 중…' : (isSignup ? '회원가입' : '로그인')}
+              </Button>
+
+              <button type="button" onClick={switchMode}
+                style={{ width: '100%', marginTop: '14px', background: 'none', border: 'none', cursor: 'pointer',
+                         fontFamily: 'inherit', fontSize: '13px', color: 'var(--ink-soft)' }}>
+                {isSignup ? '이미 계정이 있나요? ' : '계정이 없나요? '}
+                <span style={{ color: 'var(--free)', fontWeight: 600 }}>{isSignup ? '로그인' : '회원가입'}</span>
+              </button>
+            </form>
+          </div>
+        </div>
+      );
+    }
+
+    // ============================================================
+    // 📄 글쓰기 컴포저 (코드 주석 블록 모티프)
+    // ============================================================
+    function Composer({ user, onCreate }) {
+      const [title, setTitle] = useState('');
+      const [content, setContent] = useState('');
+      const [category, setCategory] = useState('맛집');
+      const [busy, setBusy] = useState(false);
+      const [error, setError] = useState('');
+
+      async function submit() {
+        if (busy) return;
+        setError('');
+        if (!title.trim()) { setError('제목을 입력해 주세요.'); return; }
+        if (!content.trim()) { setError('내용을 입력해 주세요.'); return; }
+        setBusy(true);
+        try {
+          await onCreate({ title: title.trim(), content: content.trim(), category });
+          setTitle(''); setContent(''); setCategory('맛집');
+        } catch (err) {
+          setError(err.message);
+        } finally {
+          setBusy(false);
+        }
+      }
+
+      return (
+        <section
+          style={{
+            background: 'var(--surface)', border: '1px solid var(--line)',
+            borderRadius: '18px', padding: '20px', boxShadow: 'var(--shadow)', marginBottom: '30px',
+          }}
+        >
+          <div className="mono" style={{ fontSize: '12.5px', color: 'var(--ink-faint)', marginBottom: '14px' }}>
+            // 새 글 쓰기 — <span style={{ color: 'var(--free)' }}>{user.nickname}</span> 로 작성돼요
+          </div>
+
+          <TextInput
+            type="text" value={title} maxLength={80}
+            onChange={(e) => setTitle(e.target.value)}
+            placeholder="제목"
+            style={{ fontSize: '16px', fontWeight: 600, marginBottom: '10px' }}
+          />
+          <TextArea
+            value={content}
+            onChange={(e) => setContent(e.target.value)}
+            placeholder="오늘 뭐 드셨어요? 맛집이나 레시피를 자유롭게 공유해보세요…"
+            style={{ marginBottom: '14px' }}
+          />
+          <CategoryPicker value={category} onChange={setCategory} />
+
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '14px', gap: '12px' }}>
+            <span style={{ fontSize: '12.5px', color: 'var(--coral)' }}>{error}</span>
+            <Button variant="primary" onClick={submit} disabled={busy} style={{ opacity: busy ? 0.6 : 1 }}>
+              {busy ? '올리는 중…' : '글 올리기'}
+            </Button>
+          </div>
+        </section>
+      );
+    }
+
+    // ============================================================
+    // 📄 게시글 목록 행 (제목/카테고리/작성자/시간/공감수만)
+    // ============================================================
+    function PostRow({ post, index, onOpen }) {
+      const [hover, setHover] = useState(false);
+      const edited = post.updated_at !== post.created_at;
+      return (
+        <button
+          onClick={() => onOpen(post.id)}
+          onMouseEnter={() => setHover(true)}
+          onMouseLeave={() => setHover(false)}
+          style={{
+            width: '100%', textAlign: 'left', cursor: 'pointer', fontFamily: 'inherit',
+            display: 'flex', alignItems: 'center', gap: '14px',
+            background: 'var(--surface)',
+            border: `1px solid ${hover ? 'var(--line)' : 'var(--line-soft)'}`,
+            borderRadius: '14px', padding: '15px 17px',
+            boxShadow: hover ? 'var(--shadow)' : 'none',
+            transform: hover ? 'translateY(-1px)' : 'none',
+            transition: 'transform .12s ease, box-shadow .12s ease, border-color .12s ease',
+          }}
+        >
+          <span className="mono" style={{ fontSize: '12px', color: 'var(--ink-faint)', width: '24px', flexShrink: 0 }}>
+            {String(index + 1).padStart(2, '0')}
+          </span>
+
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0 }}>
+              <span style={{
+                fontSize: '15.5px', fontWeight: 600, color: 'var(--ink)',
+                whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+              }}>{post.title}</span>
+              {edited && <span className="mono" style={{ fontSize: '11px', color: 'var(--ink-faint)', flexShrink: 0 }}>(수정됨)</span>}
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '9px', marginTop: '7px' }}>
+              <CatToken category={post.category} size="sm" />
+              <span style={{ fontSize: '13px', color: 'var(--ink-soft)' }}>{post.author_nickname}</span>
+              <span className="mono" style={{ fontSize: '11.5px', color: 'var(--ink-faint)' }}>· {timeAgo(post.created_at)}</span>
+            </div>
+          </div>
+
+          <span
+            className="mono"
+            style={{
+              display: 'inline-flex', alignItems: 'center', gap: '5px', flexShrink: 0,
+              fontSize: '13px', fontWeight: 500,
+              color: post.liked_by_me ? 'var(--coral)' : 'var(--ink-faint)',
+            }}
+          >
+            <span style={{ fontSize: '13px' }}>{post.liked_by_me ? '♥' : '♡'}</span>{post.like_count}
+          </span>
+        </button>
+      );
+    }
+
+    // ============================================================
+    // 📄 게시글 상세 / 인라인 수정 (모달)
+    // ============================================================
+    function PostDetail({ post, currentUser, onClose, onLike, onSave, onDelete }) {
+      const [editing, setEditing] = useState(false);
+      const [title, setTitle] = useState(post.title);
+      const [content, setContent] = useState(post.content);
+      const [category, setCategory] = useState(post.category);
+      const [busy, setBusy] = useState(false);
+      const [error, setError] = useState('');
+      const isMine = currentUser && post.user_id === currentUser.id;
+      const edited = post.updated_at !== post.created_at;
+
+      function startEdit() {
+        setTitle(post.title); setContent(post.content); setCategory(post.category);
+        setError(''); setEditing(true);
+      }
+
+      async function save() {
+        if (busy) return;
+        setError('');
+        if (!title.trim()) { setError('제목을 입력해 주세요.'); return; }
+        if (!content.trim()) { setError('내용을 입력해 주세요.'); return; }
+        setBusy(true);
+        try {
+          await onSave(post.id, { title: title.trim(), content: content.trim(), category });
+          setEditing(false);
+        } catch (err) {
+          setError(err.message);
+        } finally {
+          setBusy(false);
+        }
+      }
+
+      // ── 수정 모드 ──
+      if (editing) {
+        return (
+          <div style={{ padding: '22px 24px', overflowY: 'auto' }} className="scroll-ink">
+            <div className="mono" style={{ fontSize: '12.5px', color: 'var(--free)', marginBottom: '16px', fontWeight: 500 }}>
+              // 글 수정
+            </div>
+            <TextInput type="text" value={title} maxLength={80}
+              onChange={(e) => setTitle(e.target.value)}
+              style={{ fontSize: '16px', fontWeight: 600, marginBottom: '12px' }} />
+            <TextArea value={content} onChange={(e) => setContent(e.target.value)}
+              style={{ minHeight: '160px', marginBottom: '14px' }} />
+            <CategoryPicker value={category} onChange={setCategory} />
+            {error && <p style={{ color: 'var(--coral)', fontSize: '13px', marginTop: '12px' }}>{error}</p>}
+            <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', marginTop: '16px' }}>
+              <Button variant="ghost" onClick={() => setEditing(false)} disabled={busy}>취소</Button>
+              <Button variant="primary" onClick={save} disabled={busy} style={{ opacity: busy ? 0.6 : 1 }}>
+                {busy ? '저장 중…' : '저장'}
+              </Button>
+            </div>
+          </div>
+        );
+      }
+
+      // ── 읽기 모드 ──
+      return (
+        <div style={{ display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                        padding: '18px 22px 0', flexShrink: 0 }}>
+            <CatToken category={post.category} />
+            <button onClick={onClose} aria-label="닫기"
+              className="mono"
+              style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '18px',
+                       color: 'var(--ink-faint)', lineHeight: 1, padding: '4px' }}>✕</button>
+          </div>
+
+          <div style={{ padding: '14px 22px 0', overflowY: 'auto' }} className="scroll-ink">
+            <h2 style={{ fontSize: '20px', fontWeight: 700, lineHeight: 1.4, margin: 0, wordBreak: 'break-word' }}>
+              {post.title}
+              {edited && <span className="mono" style={{ fontSize: '12px', fontWeight: 400, color: 'var(--ink-faint)', marginLeft: '8px' }}>(수정됨)</span>}
+            </h2>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '9px', margin: '12px 0 18px' }}>
+              <span style={{ fontSize: '13.5px', color: 'var(--ink-soft)', fontWeight: 500 }}>{post.author_nickname}</span>
+              <span className="mono" style={{ fontSize: '12px', color: 'var(--ink-faint)' }}>· {timeAgo(post.created_at)}</span>
+            </div>
+            <p style={{ fontSize: '15.5px', lineHeight: 1.75, whiteSpace: 'pre-wrap', wordBreak: 'break-word',
+                        color: 'var(--ink)', margin: '0 0 20px' }}>
+              {post.content}
+            </p>
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px',
+                        padding: '14px 22px 20px', borderTop: '1px solid var(--line-soft)', flexShrink: 0, marginTop: '4px' }}>
+            <button
+              onClick={() => onLike(post.id)}
+              style={{
+                display: 'inline-flex', alignItems: 'center', gap: '7px', cursor: 'pointer',
+                fontFamily: 'inherit', fontSize: '13.5px', fontWeight: 600,
+                padding: '8px 15px', borderRadius: '999px',
+                border: `1.5px solid ${post.liked_by_me ? 'var(--coral)' : 'var(--line)'}`,
+                background: post.liked_by_me ? 'var(--coral-bg)' : 'transparent',
+                color: post.liked_by_me ? 'var(--coral)' : 'var(--ink-soft)',
+                transition: 'all .12s ease',
+              }}
+            >
+              <span style={{ fontSize: '15px' }}>{post.liked_by_me ? '♥' : '♡'}</span>
+              공감 {post.like_count}
+            </button>
+
+            {isMine && (
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <Button variant="outline" size="sm" onClick={startEdit}>수정</Button>
+                <Button variant="danger" size="sm" onClick={() => onDelete(post.id)}>삭제</Button>
+              </div>
+            )}
+          </div>
+        </div>
+      );
+    }
+
+    // ============================================================
+    // 📄 프로필 수정 모달
+    // ============================================================
+    function ProfileModal({ open, user, onClose, onSave }) {
+      const [nickname, setNickname] = useState('');
+      const [bio, setBio] = useState('');
+      const [busy, setBusy] = useState(false);
+      const [error, setError] = useState('');
+
+      useEffect(() => {
+        if (open && user) { setNickname(user.nickname || ''); setBio(user.bio || ''); setError(''); }
+      }, [open, user]);
+
+      async function save() {
+        if (busy) return;
+        setError('');
+        if (!nickname.trim()) { setError('닉네임을 입력해 주세요.'); return; }
+        setBusy(true);
+        try {
+          await onSave({ nickname: nickname.trim(), bio });
+          onClose();
+        } catch (err) {
+          setError(err.message);
+        } finally {
+          setBusy(false);
+        }
+      }
+
+      return (
+        <Modal open={open} onClose={onClose} maxWidth={400}>
+          <div style={{ padding: '24px' }}>
+            <div className="mono" style={{ fontSize: '12.5px', color: 'var(--free)', marginBottom: '4px', fontWeight: 500 }}>
+              // 프로필
+            </div>
+            <h2 style={{ fontSize: '19px', fontWeight: 700, margin: '0 0 18px' }}>내 정보 수정</h2>
+
+            <Field label="닉네임">
+              <TextInput type="text" value={nickname} onChange={(e) => setNickname(e.target.value)} />
+            </Field>
+            <Field label="소개" hint="선택">
+              <TextArea value={bio} onChange={(e) => setBio(e.target.value)}
+                placeholder="간단한 소개를 남겨보세요" style={{ minHeight: '76px' }} />
+            </Field>
+
+            {error && <p style={{ color: 'var(--coral)', fontSize: '13px', marginTop: '-6px', marginBottom: '10px' }}>{error}</p>}
+
+            <div style={{ display: 'flex', gap: '8px', marginTop: '4px' }}>
+              <Button variant="outline" onClick={onClose} disabled={busy} style={{ flex: 1 }}>취소</Button>
+              <Button variant="primary" onClick={save} disabled={busy} style={{ flex: 1, opacity: busy ? 0.6 : 1 }}>
+                {busy ? '저장 중…' : '저장'}
+              </Button>
+            </div>
+          </div>
+        </Modal>
+      );
+    }
+
+    // ============================================================
+    // 🧩 메인 앱 (로그인 후)
+    // ============================================================
+    function MainApp({ user, setUser, onLogout }) {
+      const [posts, setPosts] = useState([]);
+      const [sort, setSort] = useState('latest');
+      const [loading, setLoading] = useState(true);
+      const [loadError, setLoadError] = useState('');
+      const [activeId, setActiveId] = useState(null);
+      const [profileOpen, setProfileOpen] = useState(false);
+
+      const bail = useCallback(() => onLogout(), [onLogout]);
+
+      const loadPosts = useCallback(async (sortKey) => {
+        setLoading(true); setLoadError('');
+        try {
+          const res = await authFetch(`/posts?sort=${sortKey}`, {}, bail);
+          const data = await res.json();
+          setPosts(Array.isArray(data) ? data : []);
+        } catch (err) {
+          if (err.message.includes('세션')) return;
+          setLoadError('글을 불러오지 못했어요. 잠시 후 다시 시도해 주세요.');
+        } finally {
+          setLoading(false);
+        }
+      }, [bail]);
+
+      useEffect(() => { loadPosts(sort); }, [sort, loadPosts]);
+
+      async function createPost(payload) {
+        const res = await authFetch('/posts', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        }, bail);
+        if (!res.ok) {
+          const d = await res.json().catch(() => ({}));
+          throw new Error(d.error || '글을 등록하지 못했어요.');
+        }
+        await loadPosts(sort);
+      }
+
+      async function toggleLike(id) {
+        try {
+          const res = await authFetch(`/posts/${id}/like`, { method: 'POST' }, bail);
+          if (!res.ok) return;
+          const d = await res.json(); // { id, like_count, liked_by_me }
+          setPosts((prev) => prev.map((p) => p.id === id
+            ? { ...p, like_count: d.like_count, liked_by_me: d.liked_by_me } : p));
+        } catch (_) { /* 401 은 bail 처리됨 */ }
+      }
+
+      async function savePost(id, payload) {
+        const res = await authFetch(`/posts/${id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        }, bail);
+        if (!res.ok) {
+          const d = await res.json().catch(() => ({}));
+          throw new Error(d.error || '수정하지 못했어요.');
+        }
+        const updated = await res.json(); // author_nickname/like_count/liked_by_me 미포함 → 병합
+        setPosts((prev) => prev.map((p) => p.id === id ? { ...p, ...updated } : p));
+      }
+
+      async function deletePost(id) {
+        if (!window.confirm('이 글을 삭제할까요? 되돌릴 수 없어요.')) return;
+        try {
+          const res = await authFetch(`/posts/${id}`, { method: 'DELETE' }, bail);
+          if (!res.ok) {
+            const d = await res.json().catch(() => ({}));
+            window.alert(d.error || '삭제하지 못했어요.');
+            return;
+          }
+          setActiveId(null);
+          setPosts((prev) => prev.filter((p) => p.id !== id));
+        } catch (_) { /* bail */ }
+      }
+
+      async function saveProfile(payload) {
+        const res = await authFetch('/profile', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        }, bail);
+        if (!res.ok) {
+          const d = await res.json().catch(() => ({}));
+          throw new Error(d.error || '프로필을 저장하지 못했어요.');
+        }
+        const updated = await res.json();
+        setUser(updated);
+        localStorage.setItem(USER_KEY, JSON.stringify(updated));
+        await loadPosts(sort); // 목록의 작성자 닉네임 갱신
+      }
+
+      const activePost = posts.find((p) => p.id === activeId);
+
+      const SortTab = ({ value, children }) => {
+        const active = sort === value;
+        return (
+          <button
+            onClick={() => setSort(value)}
+            style={{
+              padding: '8px 15px', borderRadius: '999px', cursor: 'pointer', fontFamily: 'inherit',
+              fontSize: '13.5px', fontWeight: active ? 600 : 500,
+              border: `1.5px solid ${active ? 'var(--ink)' : 'var(--line)'}`,
+              background: active ? 'var(--ink)' : 'transparent',
+              color: active ? 'var(--paper)' : 'var(--ink-soft)',
+              transition: 'all .12s ease',
+            }}
+          >{children}</button>
+        );
+      };
+
+      return (
+        <div style={{ maxWidth: '720px', margin: '0 auto', padding: '30px 20px 90px' }}>
+          {/* 헤더 */}
+          <header style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                           gap: '12px', marginBottom: '28px', flexWrap: 'wrap' }}>
+            <Brand />
+            <div style={{ display: 'flex', alignItems: 'center', gap: '9px' }}>
+              <button
+                onClick={() => setProfileOpen(true)}
+                style={{
+                  display: 'inline-flex', alignItems: 'center', gap: '8px', cursor: 'pointer',
+                  fontFamily: 'inherit', fontSize: '13.5px', fontWeight: 500, color: 'var(--ink)',
+                  background: 'var(--surface)', border: '1px solid var(--line)',
+                  borderRadius: '999px', padding: '6px 8px 6px 6px',
+                }}
+              >
+                <span style={{
+                  width: '24px', height: '24px', borderRadius: '50%', flexShrink: 0,
+                  background: 'var(--free-bg)', color: 'var(--free)',
+                  display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                  fontSize: '12px', fontWeight: 700,
+                }}>{(user.nickname || '?').slice(0, 1)}</span>
+                {user.nickname}
+              </button>
+              <Button variant="ghost" size="sm" onClick={onLogout}
+                style={{ border: '1px solid var(--line)' }}>로그아웃</Button>
+            </div>
+          </header>
+
+          <Composer user={user} onCreate={createPost} />
+
+          {/* 정렬 탭 */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '16px' }}>
+            <SortTab value="latest">최신순</SortTab>
+            <SortTab value="likes">공감순</SortTab>
+            <span className="mono" style={{ marginLeft: 'auto', fontSize: '12px', color: 'var(--ink-faint)' }}>
+              {posts.length}개의 글
+            </span>
+          </div>
+
+          {/* 목록 */}
+          {loading ? (
+            <div className="mono" style={{ textAlign: 'center', color: 'var(--ink-faint)', padding: '48px 0', fontSize: '14px' }}>
+              불러오는 중…
+            </div>
+          ) : loadError ? (
+            <div style={{ textAlign: 'center', padding: '44px 0' }}>
+              <p style={{ color: 'var(--coral)', fontSize: '14px', marginBottom: '14px' }}>{loadError}</p>
+              <Button variant="outline" size="sm" onClick={() => loadPosts(sort)}>다시 시도</Button>
+            </div>
+          ) : posts.length === 0 ? (
+            <div style={{
+              textAlign: 'center', padding: '52px 24px',
+              background: 'var(--surface)', border: '1px dashed var(--line)', borderRadius: '16px',
+            }}>
+              <p className="mono" style={{ fontSize: '14px', color: 'var(--ink-faint)', margin: 0 }}>
+                // 아직 등록된 맛집·레시피가 없어요
+              </p>
+              <p style={{ fontSize: '14px', color: 'var(--ink-soft)', marginTop: '10px' }}>
+                오늘 먹은 메뉴로 첫 글을 남겨보세요.
+              </p>
+            </div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              {posts.map((p, i) => (
+                <PostRow key={p.id} post={p} index={i} onOpen={setActiveId} />
+              ))}
+            </div>
+          )}
+
+          {/* 상세 모달 */}
+          <Modal open={!!activePost} onClose={() => setActiveId(null)} maxWidth={500}>
+            {activePost && (
+              <PostDetail
+                post={activePost}
+                currentUser={user}
+                onClose={() => setActiveId(null)}
+                onLike={toggleLike}
+                onSave={savePost}
+                onDelete={deletePost}
+              />
+            )}
+          </Modal>
+
+          {/* 프로필 모달 */}
+          <ProfileModal open={profileOpen} user={user} onClose={() => setProfileOpen(false)} onSave={saveProfile} />
+        </div>
+      );
+    }
+
+    // ============================================================
+    // 🚀 루트 앱 — 세션 부트스트랩 & 화면 전환
+    // ============================================================
+    function App() {
+      const [user, setUser] = useState(() => {
+        const raw = localStorage.getItem(USER_KEY);
+        const token = localStorage.getItem(TOKEN_KEY);
+        if (raw && token) { try { return JSON.parse(raw); } catch (_) { return null; } }
+        return null;
+      });
+
+      const handleLogout = useCallback(() => {
+        localStorage.removeItem(TOKEN_KEY);
+        localStorage.removeItem(USER_KEY);
+        setUser(null);
+      }, []);
+
+      if (!user) return <AuthScreen onAuthed={setUser} />;
+      return <MainApp user={user} setUser={setUser} onLogout={handleLogout} />;
+    }
+
+    // ============================================================
+    // 렌더링
+    // ============================================================
+    ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+  </script>
+</body>
+</html>

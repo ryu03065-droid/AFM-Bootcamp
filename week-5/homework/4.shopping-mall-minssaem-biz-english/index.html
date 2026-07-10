@@ -1,0 +1,1401 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>민쌤의 상황별로 배우는 비즈니스 영어</title>
+  <script src="https://cdn.tailwindcss.com/3.4.16"></script>
+  <!-- CDN 버전 고정 필수: @babel/standalone 8.x 는 inline text/babel 을 깨뜨리므로 7.25.9 유지 -->
+  <script src="https://unpkg.com/react@18.3.1/umd/react.development.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone@7.25.9/babel.min.js"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            ink: {
+              50: '#f3f6fc', 100: '#e5ebf7', 200: '#c6d4ec', 300: '#93aad9',
+              400: '#5f7cbf', 500: '#3d5aa3', 600: '#2c4486', 700: '#22356b',
+              800: '#1a2a56', 900: '#14213f', 950: '#0c1528'
+            },
+            accent: {
+              50: '#eff5ff', 100: '#dbe8fe', 200: '#bfd6fe', 300: '#93b8fd',
+              400: '#6092fa', 500: '#3b6ef5', 600: '#2456e6', 700: '#1c43c9',
+              800: '#1d3ba3', 900: '#1d3681'
+            }
+          },
+          fontFamily: {
+            sans: ['"Pretendard"', 'system-ui', '-apple-system', '"Apple SD Gothic Neo"', '"Malgun Gothic"', 'sans-serif']
+          },
+          boxShadow: {
+            soft: '0 1px 2px rgba(16,24,40,0.04), 0 4px 16px rgba(16,24,40,0.06)',
+            lift: '0 8px 30px rgba(16,24,40,0.12)'
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    html { scroll-behavior: smooth; }
+    @keyframes fadeUp { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
+    .fade-up { animation: fadeUp .5s ease both; }
+    .no-scrollbar::-webkit-scrollbar { display: none; }
+    .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+  </style>
+</head>
+<body class="bg-ink-50 text-ink-900 antialiased">
+  <div id="root"></div>
+
+  <script type="text/babel">
+    // ========================================
+    // React Hooks
+    // ========================================
+    const { useState, useEffect, useContext, createContext, useMemo, useCallback, useRef } = React;
+
+    // ========================================
+    // 📦 DATA (상세페이지 실제 내용 기반)
+    // ========================================
+    const COURSES = [
+      {
+        id: 'track1',
+        badge: 'TRACK 01',
+        title: '기본기 쌓는 비즈니스 영어',
+        subtitle: '바로 말하기가 부담스러운 초보를 위한 기초 탄탄 렉쳐형 수업',
+        level: '입문·초급',
+        tag: '비즈니스 영어 기초부터',
+        hashtags: ['#비즈니스 영어 기본기 쌓기', '#문법·표현·단어 위주 학습', '#렉쳐형 수업'],
+        desc: '문법·표현·단어를 위주로, 실전 비즈니스 상황에서 바로 쓰는 표현을 기초부터 탄탄하게 쌓는 렉쳐형 수업입니다.',
+        price: 320000, salePrice: 249000, priceNote: '4주 과정 기준',
+        rating: 4.9, reviews: 214, students: 1120,
+        hours: '주 2회 · 4주', lessons: 8,
+        hue: 'from-ink-700 to-ink-900',
+        method: '문법, 표현, 단어 위주로 기초부터 탄탄하게!',
+        whoFor: ['영어가 오랜만이다', '문법이 부족하다', '차근차근 배우고 싶다'],
+        features: [
+          { t: '바로 말하기가 부담스러운 초보를 위한 수업', d: '비즈니스 영어 기본기 쌓기에 집중해, 말하기가 부담스러운 분도 편하게 시작할 수 있습니다.' },
+          { t: '실전에서 쓰는 표현을 배우는 렉쳐형 수업', d: '실전 비즈니스 상황에서 바로 쓸 수 있는 표현을 체계적으로 배웁니다.' },
+          { t: '확실한 복습과 피드백을 포함한 커리큘럼', d: '배운 내용을 반드시 복습하고 피드백까지 받는 촘촘한 수업 구성.' }
+        ],
+        outcomes: [
+          '비즈니스 상황에 맞는 문법·표현·단어의 기초를 탄탄하게 정리',
+          '이메일·전화·미팅에서 자주 쓰는 핵심 표현을 자신 있게 사용',
+          '복습과 피드백으로 배운 표현을 확실히 내 것으로'
+        ],
+        curriculum: [
+          { chapter: 'Chapter 1. 비즈니스 영어의 뼈대', lessons: ['비즈니스 이메일의 3단 구조', '격식 레벨 이해하기: formal vs casual', '자주 틀리는 인사·맺음말 표현'] },
+          { chapter: 'Chapter 2. 이메일 영어 기초', lessons: ['정중하게 요청하기: Could you / I would appreciate', '자료·첨부 공유 표현', '마감·기한 부드럽게 전달하기'] },
+          { chapter: 'Chapter 3. 전화·미팅 필수 표현', lessons: ['전화 연결·용건 전달 표현', '미팅을 시작하고 진행하는 표현', '안 들릴 때 다시 확인하기'] },
+          { chapter: 'Chapter 4. 복습 & 피드백', lessons: ['배운 표현 총정리', '실전 문장 만들기 훈련', '개인별 피드백 세션'] }
+        ]
+      },
+      {
+        id: 'track2',
+        badge: 'TRACK 02',
+        title: '말하는 비즈니스 영어',
+        subtitle: '스피킹 발화 연습부터 피드백까지, 라운드 테이블 실전 회화',
+        level: '초급·중급',
+        tag: '상황별로 배우는 실전 회화',
+        hashtags: ['#스피킹 발화 연습', '#라운드 테이블', '#발화 내용 기반 피드백 제공'],
+        desc: '단순히 외우는 대신, 문장을 영어식 표현으로 자연스럽게 말하는 데 집중하는 상황별 실전 회화 수업입니다.',
+        price: 360000, salePrice: 279000, priceNote: '4주 과정 기준',
+        rating: 4.9, reviews: 302, students: 1680,
+        hours: '주 2회 · 4주', lessons: 8,
+        hue: 'from-accent-600 to-accent-800',
+        method: '스피킹 발화 연습부터 피드백까지, 라운드 테이블에서!',
+        whoFor: ['혼자 문장 정도는 만들 수 있다', '자연스럽게 말하고 싶다', '회의·업무 영어가 목표다'],
+        features: [
+          { t: "'문장 말하기' 수업", d: "단순히 외우는 대신, 어떻게 문장을 '영어식 표현'으로 자연스럽게 말할 수 있는지에 집중합니다." },
+          { t: '문장과 말투를 함께 다듬는 수업', d: '표현을 자연스럽게 고쳐드리며, 문장과 말투를 함께 다듬어 드립니다.' },
+          { t: '딱딱함 대신 함께 웃으면서 배우는 분위기', d: '라운드 테이블에서 부담 없이, 즐겁게 발화 연습을 반복합니다.' }
+        ],
+        outcomes: [
+          '외운 표현이 실제 상황에서 입으로 바로 나오는 발화 훈련',
+          '회의·발표·협상에서 자연스러운 영어식 표현 사용',
+          '내 발화 내용에 기반한 1:1 맞춤 피드백'
+        ],
+        curriculum: [
+          { chapter: 'Chapter 1. 화상회의 스피킹', lessons: ['회의를 열고 진행하는 표현', '자연스럽게 끼어들어 의견 말하기', '정중하게 반대·반박하기'] },
+          { chapter: 'Chapter 2. 발표·설명 스피킹', lessons: ['핵심을 먼저 말하는 두괄식 표현', '데이터·근거를 덧붙이기', '질문에 자연스럽게 답하기'] },
+          { chapter: 'Chapter 3. 협상·스몰토크', lessons: ['첫 인사와 아이스브레이킹', '가격·조건 조율 표현', '양보를 이끌어내는 문장 전략'] },
+          { chapter: 'Chapter 4. 라운드 테이블 실전', lessons: ['상황별 롤플레이', '발화 내용 기반 피드백', '표현·말투 교정 세션'] }
+        ]
+      },
+      {
+        id: 'coaching',
+        badge: 'PREMIUM',
+        title: '1:1 Executive 비즈니스 영어 코칭',
+        subtitle: '임원·리더를 위한 완전 맞춤형 1:1 비즈니스 영어 코칭',
+        level: '맞춤형',
+        tag: 'Executive & Business English Coaching',
+        hashtags: ['#완전 맞춤 커리큘럼', '#임원·리더 대상', '#일정 유연 조율'],
+        desc: '대기업 임원 대상 강의 경험을 바탕으로, 개인의 업무 상황과 목표에 맞춰 설계하는 프리미엄 1:1 코칭입니다.',
+        price: 1200000, salePrice: 890000, priceNote: '8회 패키지 기준',
+        rating: 5.0, reviews: 58, students: 210,
+        hours: '1:1 · 회당 60분', lessons: 8,
+        hue: 'from-ink-800 to-ink-950',
+        method: '당신의 업무 상황에 딱 맞춘 완전 맞춤형 코칭',
+        whoFor: ['임원·리더 포지션에서 영어가 필요한 분', '특정 상황(IR·협상·발표)을 준비하는 분', '내 일정에 맞춰 집중적으로 배우고 싶은 분'],
+        features: [
+          { t: '완전 맞춤형 커리큘럼', d: '실제 업무 자료와 상황을 기반으로, 당신에게 필요한 표현만 설계합니다.' },
+          { t: '대기업 임원 강의 노하우', d: '삼성물산·삼성 E&A·SK하이닉스·CJ ENM 등 임직원 교육 경험을 그대로.' },
+          { t: '유연한 일정 조율', d: '바쁜 리더의 일정에 맞춰 시간과 커리큘럼을 유연하게 운영합니다.' }
+        ],
+        outcomes: [
+          '나의 실제 업무 상황에 딱 맞는 영어 표현 완비',
+          'IR·협상·발표 등 중요한 자리를 위한 집중 준비',
+          '1:1 밀착 피드백으로 빠른 실력 향상'
+        ],
+        curriculum: [
+          { chapter: '1. 진단 & 목표 설정', lessons: ['현재 수준 진단', '업무 상황·목표 파악', '맞춤 커리큘럼 설계'] },
+          { chapter: '2. 상황별 집중 코칭', lessons: ['이메일·미팅·발표 중 필요 영역 집중', '실제 업무 자료 기반 훈련', '표현·발음·말투 교정'] },
+          { chapter: '3. 실전 리허설 & 피드백', lessons: ['중요 미팅·발표 리허설', '1:1 밀착 피드백', '반복 교정과 마무리'] }
+        ]
+      }
+    ];
+
+    // 머리로 아는 영어가 아닌, 입으로 나오는 영어 (before → after)
+    const TRANSFORMS = [
+      { before: "I don't know", beforeKo: '모르겠어요', after: "I'll look into it and get back to you", afterKo: '제가 다시 보고 연락 드릴게요' },
+      { before: 'Do it again', beforeKo: '다시 해', after: 'Could you revise it and send me an updated version?', afterKo: '이거 다시 고쳐서 전달 줄래요?' },
+      { before: 'I need it today', beforeKo: '오늘까지 필요해', after: 'Would it be possible to have this by the end of the day?', afterKo: '오늘 업무 시간까지 가능할까요?' },
+      { before: "You're wrong", beforeKo: '틀렸어', after: 'I see it a bit differently', afterKo: '나는 좀 다르게 생각해요' }
+    ];
+
+    const REVIEWS = [
+      { name: '수강생 *승* 님', role: '직장인', rating: 5, course: '기본기 쌓는 비즈니스 영어', title: '10년 만에 다시 시작한 영어도 부담 없이!', text: '수능 이후 10년 가까이 영어를 놓고 살았는데, 업무 때문에 다시 시작하게 됐습니다. 걱정이 많았지만 민쌤 수업은 수준에 맞춰 이끌어주셔서 영어가 정말 오랜만인 저도 부담 없이 따라갈 수 있었어요.' },
+      { name: '수강생 *용* 님', role: '종로 직장인', rating: 5, course: '말하는 비즈니스 영어', title: '직장에서 바로 쓰는 영어를 배울 수 있어요', text: '종로의 바쁜 직장인에게 최적의 회화 수업입니다. 실제 회사에서 마주하는 상황을 중심으로 영어를 배우고, 한 수업에서 여러 번 직접 말하며 피드백을 받을 수 있습니다. 원어민들이 자주 쓰는 자연스러운 표현과 유연한 보강 시스템까지 갖춰져 있어 꾸준히 다니기 좋은 수업입니다.' },
+      { name: '수강생 *혜* 님', role: '직장인', rating: 5, course: '말하는 비즈니스 영어', title: '학생 관리가 정말 꼼꼼합니다', text: '몇 달 째 민쌤 비즈니스 수업을 듣고 있습니다. 특히 꼼꼼하게 학생을 관리해주시는 점이 만족스럽습니다. 결석 시 교차 수강이 자유롭고, 심지어 주말에 강남점에서도 대면 수업을 들을 수 있어 좋더라구요. 다양한 수강생들과 함께 수업할 수 있어서 재밌게 듣고 있습니다~!' },
+      { name: '수강생 *소* 님', role: '직장인', rating: 5, course: '말하는 비즈니스 영어', title: '몇 달째 들어도 지루하지 않은 수업!', text: '교재가 알차서 좋다고 생각합니다! 때가 되면 또 반복하는 게 아닌 항상 조금씩 다른 토픽으로 수업을 구성해 주셔서 몇 달 째 들어도 지루하지 않고 재밌습니다! 민쌤 수업 강력 추천합니다:)' },
+      { name: '수강생 *현* 님', role: 'IT기업 대리', rating: 5, course: '기본기 쌓는 비즈니스 영어', title: '번역기 창을 닫게 됐어요', text: '기초부터 차근차근 잡아주셔서 이메일 쓸 때 더 이상 번역기에 의존하지 않게 됐어요. 문법이 약했는데 표현 위주로 배우니 실무에 바로 적용됩니다.' },
+      { name: '수강생 *지* 님', role: '외국계 사원', rating: 5, course: '말하는 비즈니스 영어', title: '회의에서 먼저 입을 열게 됐어요', text: '라운드 테이블에서 계속 말하다 보니 회의에서 듣기만 하던 제가 이제 먼저 의견을 냅니다. 발화 내용을 바탕으로 표현을 고쳐주시는 피드백이 정말 좋아요.' },
+      { name: '수강생 *민* 님', role: '대기업 과장', rating: 5, course: '1:1 Executive 비즈니스 영어 코칭', title: '중요한 발표를 자신 있게', text: '해외 파트너 대상 발표를 앞두고 1:1 코칭을 받았어요. 제 자료를 그대로 가지고 표현과 말투를 다듬어 주셔서, 실제 발표에서 훨씬 자신 있게 말할 수 있었습니다.' }
+    ];
+
+    const FEATURES = [
+      { icon: 'target', title: '실무 바로 적용', desc: '실제 회사에서 마주하는 상황을 중심으로, 오늘 배운 표현을 내일 바로 씁니다.' },
+      { icon: 'chat', title: '상황별 롤플레이', desc: '이메일·회의·전화·협상 등 상황별 시나리오로 입이 트이는 연습을 반복합니다.' },
+      { icon: 'refresh', title: '유연한 교차 수강', desc: '주중·주말, 파고다 종로·강남점 사이 자유롭게 교차 수강. 결석 시 ZOOM LIVE 보강.' },
+      { icon: 'check', title: '원어민 표현 감수', desc: '어색한 콩글리시가 아닌, 원어민이 실제로 쓰는 자연스러운 표현만 다룹니다.' }
+    ];
+
+    const FAQS = [
+      { q: 'TRACK 01과 TRACK 02는 어떻게 다른가요?', a: 'TRACK 01(기본기 쌓는 비즈니스 영어)은 문법·표현·단어 위주의 렉쳐형 수업으로, 영어가 오랜만이거나 기초를 다지고 싶은 분께 맞습니다. TRACK 02(말하는 비즈니스 영어)는 라운드 테이블에서 스피킹 발화를 연습하는 실전 회화 수업으로, 혼자 문장은 만들 수 있지만 자연스럽게 말하고 싶은 분께 맞습니다.' },
+      { q: '교차 수강이 가능한가요?', a: '네. 주중·주말, 파고다 종로점과 강남점 사이를 자유롭게 교차 수강할 수 있습니다. 일정이 바뀌어도 유연하게 수업을 이어갈 수 있어요.' },
+      { q: '수업에 결석하면 어떻게 하나요?', a: '대면 수업에 결석하실 경우 ZOOM LIVE 수업으로 참여하실 수 있습니다. 보강 시스템이 유연해 직장인이 꾸준히 다니기 좋습니다.' },
+      { q: '영어를 오랜만에 하는데 따라갈 수 있을까요?', a: 'TRACK 01은 바로 말하기가 부담스러운 초보를 위해 설계된 수업입니다. 수준에 맞춰 이끌어 드리니 영어가 오랜만인 분도 부담 없이 따라오실 수 있습니다.' },
+      { q: '교재와 실습 자료를 제공하나요?', a: '네. 상황별 표현 정리 자료를 제공하며, 매번 조금씩 다른 토픽으로 수업을 구성해 오래 들어도 지루하지 않습니다.' },
+      { q: '원어민이 쓰는 표현으로 배우나요?', a: '원어민들이 실제로 자주 쓰는 자연스러운 표현을 중심으로 배우고, 발화 내용에 기반해 표현과 말투를 자연스럽게 고쳐 드립니다.' },
+      { q: '1:1 코칭도 신청할 수 있나요?', a: '네. 임원·리더를 위한 1:1 Executive 비즈니스 영어 코칭을 운영합니다. 실제 업무 상황과 목표에 맞춰 완전 맞춤형으로 설계됩니다. 자세한 내용은 강좌 상세 페이지를 확인해 주세요.' }
+    ];
+
+    const LOGOS = ['SAMSUNG', '삼성물산', '삼성 E&A', 'SK hynix', 'CJ ENM'];
+
+    const findCourse = (id) => COURSES.find(c => c.id === id);
+    const won = (n) => n.toLocaleString('ko-KR') + '원';
+
+    // ========================================
+    // 🎨 아이콘
+    // ========================================
+    const Icon = ({ name, className = 'w-5 h-5' }) => {
+      const paths = {
+        target: <><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1"/></>,
+        chat: <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>,
+        clock: <><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></>,
+        check: <path d="M20 6 9 17l-5-5"/>,
+        refresh: <><path d="M3 12a9 9 0 0 1 15-6.7L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-15 6.7L3 16"/><path d="M3 21v-5h5"/></>,
+        cart: <><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.7 13.4a2 2 0 0 0 2 1.6h9.7a2 2 0 0 0 2-1.6L23 6H6"/></>,
+        star: <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01z"/>,
+        menu: <><path d="M3 12h18"/><path d="M3 6h18"/><path d="M3 18h18"/></>,
+        close: <><path d="M18 6 6 18"/><path d="M6 6l12 12"/></>,
+        chevron: <path d="M6 9l6 6 6-6"/>,
+        arrow: <path d="M5 12h14M13 6l6 6-6 6"/>,
+        play: <path d="M8 5v14l11-7z"/>,
+        book: <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20V3H6.5A2.5 2.5 0 0 0 4 5.5z"/>,
+        user: <><circle cx="12" cy="8" r="4"/><path d="M4 21v-1a6 6 0 0 1 6-6h4a6 6 0 0 1 6 6v1"/></>,
+        trash: <><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></>,
+        shield: <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>,
+        globe: <><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a15 15 0 0 1 0 18M12 3a15 15 0 0 0 0 18"/></>,
+        award: <><circle cx="12" cy="8" r="6"/><path d="M9 13.5 8 22l4-2 4 2-1-8.5"/></>,
+        snow: <><path d="M12 2v20M12 2l-3 3M12 2l3 3M12 22l-3-3M12 22l3-3M2 12h20M2 12l3-3M2 12l3 3M22 12l-3-3M22 12l-3 3M5 5l14 14M19 5 5 19"/></>
+      };
+      return (
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className={className}>
+          {paths[name]}
+        </svg>
+      );
+    };
+
+    const Stars = ({ rating, className = 'w-4 h-4' }) => (
+      <span className="inline-flex items-center gap-0.5" aria-label={`별점 ${rating}점`}>
+        {[1,2,3,4,5].map(i => (
+          <svg key={i} viewBox="0 0 24 24" className={className}
+            fill={i <= Math.round(rating) ? '#f5a623' : '#e2e8f0'} stroke="none">
+            <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01z"/>
+          </svg>
+        ))}
+      </span>
+    );
+
+    // ========================================
+    // 🎨 Design System
+    // ========================================
+    const Button = ({ variant = 'primary', size = 'md', className = '', as = 'button', href, children, ...props }) => {
+      const base = 'inline-flex items-center justify-center gap-2 font-semibold rounded-xl transition-all duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-400 focus-visible:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed';
+      const variants = {
+        primary: 'bg-accent-600 text-white hover:bg-accent-700 shadow-soft hover:shadow-lift',
+        dark: 'bg-ink-900 text-white hover:bg-ink-800 shadow-soft',
+        secondary: 'bg-white text-ink-800 border border-ink-200 hover:border-ink-300 hover:bg-ink-50',
+        ghost: 'text-ink-700 hover:bg-ink-100',
+        danger: 'text-red-600 hover:bg-red-50 border border-red-200'
+      };
+      const sizes = { sm: 'text-sm px-3.5 py-2', md: 'px-5 py-2.5', lg: 'text-lg px-7 py-3.5' };
+      const cls = `${base} ${variants[variant]} ${sizes[size]} ${className}`;
+      if (as === 'a') return <a href={href} className={cls} {...props}>{children}</a>;
+      return <button className={cls} {...props}>{children}</button>;
+    };
+
+    const Card = ({ className = '', children, ...props }) => (
+      <div className={`bg-white rounded-2xl border border-ink-100 shadow-soft ${className}`} {...props}>{children}</div>
+    );
+
+    const Badge = ({ children, className = '' }) => (
+      <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold tracking-wide ${className}`}>{children}</span>
+    );
+
+    const SectionTitle = ({ eyebrow, title, desc, center }) => (
+      <div className={center ? 'text-center max-w-2xl mx-auto' : 'max-w-2xl'}>
+        {eyebrow && <div className="text-accent-600 font-bold text-sm tracking-widest uppercase mb-3">{eyebrow}</div>}
+        <h2 className="text-2xl sm:text-3xl md:text-4xl font-extrabold text-ink-900 leading-tight tracking-tight">{title}</h2>
+        {desc && <p className="mt-4 text-ink-500 text-base sm:text-lg leading-relaxed">{desc}</p>}
+      </div>
+    );
+
+    // ========================================
+    // 🔀 Router (hash 기반)
+    // ========================================
+    const RouterContext = createContext();
+    const getHash = () => window.location.hash.replace(/^#/, '') || '/';
+
+    const Router = ({ children }) => {
+      const [path, setPath] = useState(getHash());
+      useEffect(() => {
+        const onChange = () => { setPath(getHash()); window.scrollTo(0, 0); };
+        window.addEventListener('hashchange', onChange);
+        return () => window.removeEventListener('hashchange', onChange);
+      }, []);
+      const navigate = useCallback((to) => { window.location.hash = to; }, []);
+      return <RouterContext.Provider value={{ path, navigate }}>{children}</RouterContext.Provider>;
+    };
+    const useRouter = () => useContext(RouterContext);
+
+    const matchRoute = (pattern, path) => {
+      const pp = pattern.split('/').filter(Boolean);
+      const ap = path.split('/').filter(Boolean);
+      if (pp.length !== ap.length) return null;
+      const params = {};
+      for (let i = 0; i < pp.length; i++) {
+        if (pp[i].startsWith(':')) params[pp[i].slice(1)] = decodeURIComponent(ap[i]);
+        else if (pp[i] !== ap[i]) return null;
+      }
+      return params;
+    };
+
+    const Link = ({ to, className = '', children, onClick, ...props }) => {
+      const { navigate } = useRouter();
+      return (
+        <a href={'#' + to} className={className}
+          onClick={(e) => { e.preventDefault(); navigate(to); onClick && onClick(e); }} {...props}>
+          {children}
+        </a>
+      );
+    };
+
+    // ========================================
+    // 🛒 Store (Cart + Purchased, localStorage)
+    // ========================================
+    const StoreContext = createContext();
+    const load = (key, fallback) => {
+      try { const v = localStorage.getItem(key); return v ? JSON.parse(v) : fallback; }
+      catch { return fallback; }
+    };
+
+    const StoreProvider = ({ children }) => {
+      const [cart, setCart] = useState(() => load('minssaem_cart', []));
+      const [purchased, setPurchased] = useState(() => load('minssaem_purchased', []));
+
+      useEffect(() => { localStorage.setItem('minssaem_cart', JSON.stringify(cart)); }, [cart]);
+      useEffect(() => { localStorage.setItem('minssaem_purchased', JSON.stringify(purchased)); }, [purchased]);
+
+      const addToCart = useCallback((id) => {
+        setCart(prev => prev.includes(id) ? prev : [...prev, id]);
+      }, []);
+      const removeFromCart = useCallback((id) => setCart(prev => prev.filter(x => x !== id)), []);
+      const clearCart = useCallback(() => setCart([]), []);
+      const purchase = useCallback((ids) => {
+        setPurchased(prev => Array.from(new Set([...prev, ...ids])));
+        setCart([]);
+      }, []);
+
+      const value = { cart, purchased, addToCart, removeFromCart, clearCart, purchase,
+        inCart: (id) => cart.includes(id), isPurchased: (id) => purchased.includes(id) };
+      return <StoreContext.Provider value={value}>{children}</StoreContext.Provider>;
+    };
+    const useStore = () => useContext(StoreContext);
+
+    // toast
+    const ToastContext = createContext();
+    const ToastProvider = ({ children }) => {
+      const [toasts, setToasts] = useState([]);
+      const toast = useCallback((msg) => {
+        const id = Date.now() + Math.random();
+        setToasts(t => [...t, { id, msg }]);
+        setTimeout(() => setToasts(t => t.filter(x => x.id !== id)), 2600);
+      }, []);
+      return (
+        <ToastContext.Provider value={toast}>
+          {children}
+          <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[100] flex flex-col gap-2 items-center pointer-events-none">
+            {toasts.map(t => (
+              <div key={t.id} className="fade-up bg-ink-900 text-white text-sm font-medium px-5 py-3 rounded-xl shadow-lift flex items-center gap-2">
+                <Icon name="check" className="w-4 h-4 text-accent-300" /> {t.msg}
+              </div>
+            ))}
+          </div>
+        </ToastContext.Provider>
+      );
+    };
+    const useToast = () => useContext(ToastContext);
+
+    // ========================================
+    // 🧩 Course Thumbnail (그라디언트 대체 이미지)
+    // ========================================
+    const Thumb = ({ course, className = '' }) => (
+      <div className={`relative overflow-hidden bg-gradient-to-br ${course.hue} ${className}`}>
+        <div className="absolute inset-0 opacity-20"
+          style={{ backgroundImage: 'radial-gradient(circle at 20% 20%, white 1px, transparent 1px)', backgroundSize: '22px 22px' }} />
+        <div className="absolute -right-8 -bottom-8 w-40 h-40 rounded-full bg-white/10" />
+        <div className="absolute right-6 top-6 w-16 h-16 rounded-2xl bg-white/10 backdrop-blur-sm" />
+        <div className="relative h-full flex flex-col justify-end p-5">
+          <div className="text-white/70 text-xs font-semibold tracking-widest uppercase mb-1">{course.badge || 'Business English'}</div>
+          <div className="text-white text-lg sm:text-xl font-extrabold leading-snug">{course.title}</div>
+        </div>
+      </div>
+    );
+
+    // ========================================
+    // 🧩 Header
+    // ========================================
+    const Header = () => {
+      const { cart } = useStore();
+      const { path } = useRouter();
+      const [open, setOpen] = useState(false);
+      useEffect(() => { setOpen(false); }, [path]);
+
+      const nav = [
+        { to: '/courses', label: '강좌 목록' },
+        { to: '/instructor', label: '강사소개' },
+        { to: '/reviews', label: '수강후기' },
+        { to: '/faq', label: 'FAQ' }
+      ];
+      const active = (to) => path === to || (to !== '/' && path.startsWith(to));
+
+      return (
+        <header className="sticky top-0 z-50 bg-white/85 backdrop-blur-md border-b border-ink-100">
+          <div className="max-w-6xl mx-auto px-4 sm:px-6">
+            <div className="h-16 flex items-center justify-between gap-4">
+              <Link to="/" className="flex items-center gap-2.5 shrink-0">
+                <span className="w-9 h-9 rounded-xl bg-ink-900 text-white grid place-items-center font-extrabold">민</span>
+                <span className="font-extrabold text-ink-900 leading-tight hidden sm:block">
+                  민쌤의 <span className="text-accent-600">비즈니스 영어</span>
+                </span>
+              </Link>
+
+              <nav className="hidden md:flex items-center gap-1">
+                {nav.map(n => (
+                  <Link key={n.to} to={n.to}
+                    className={`px-3.5 py-2 rounded-lg text-sm font-semibold transition-colors ${active(n.to) ? 'text-accent-600' : 'text-ink-600 hover:text-ink-900 hover:bg-ink-50'}`}>
+                    {n.label}
+                  </Link>
+                ))}
+              </nav>
+
+              <div className="flex items-center gap-2">
+                <Link to="/my-courses" className="hidden sm:inline-flex px-3.5 py-2 rounded-lg text-sm font-semibold text-ink-600 hover:text-ink-900 hover:bg-ink-50">내 강의</Link>
+                <Link to="/cart" className="relative p-2.5 rounded-lg text-ink-700 hover:bg-ink-50" aria-label="장바구니">
+                  <Icon name="cart" className="w-5 h-5" />
+                  {cart.length > 0 && (
+                    <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] px-1 rounded-full bg-accent-600 text-white text-[11px] font-bold grid place-items-center">{cart.length}</span>
+                  )}
+                </Link>
+                <button className="md:hidden p-2.5 rounded-lg text-ink-700 hover:bg-ink-50" onClick={() => setOpen(o => !o)} aria-label="메뉴">
+                  <Icon name={open ? 'close' : 'menu'} className="w-6 h-6" />
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {open && (
+            <div className="md:hidden border-t border-ink-100 bg-white">
+              <div className="max-w-6xl mx-auto px-4 py-3 flex flex-col">
+                {nav.map(n => (
+                  <Link key={n.to} to={n.to} className={`px-3 py-3 rounded-lg font-semibold ${active(n.to) ? 'text-accent-600 bg-accent-50' : 'text-ink-700 hover:bg-ink-50'}`}>{n.label}</Link>
+                ))}
+                <Link to="/my-courses" className="px-3 py-3 rounded-lg font-semibold text-ink-700 hover:bg-ink-50">내 강의</Link>
+              </div>
+            </div>
+          )}
+        </header>
+      );
+    };
+
+    // ========================================
+    // 🧩 Footer
+    // ========================================
+    const Footer = () => (
+      <footer className="bg-ink-950 text-ink-300 mt-20">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 py-14">
+          <div className="grid gap-10 md:grid-cols-4">
+            <div className="md:col-span-2">
+              <div className="flex items-center gap-2.5 mb-4">
+                <span className="w-9 h-9 rounded-xl bg-white text-ink-900 grid place-items-center font-extrabold">민</span>
+                <span className="font-extrabold text-white">민쌤의 비즈니스 영어</span>
+              </div>
+              <p className="text-sm leading-relaxed max-w-md text-ink-400">
+                파고다 강남·종로 비즈니스 회화 대표 강사 민쌤과 함께.
+                머리로 아는 영어가 아닌, 입으로 나오는 실무 영어를 만듭니다.
+              </p>
+            </div>
+            <div>
+              <div className="text-white font-bold text-sm mb-3">바로가기</div>
+              <ul className="space-y-2 text-sm">
+                <li><Link to="/courses" className="hover:text-white">강좌 목록</Link></li>
+                <li><Link to="/instructor" className="hover:text-white">강사 소개</Link></li>
+                <li><Link to="/reviews" className="hover:text-white">수강 후기</Link></li>
+                <li><Link to="/faq" className="hover:text-white">자주 묻는 질문</Link></li>
+              </ul>
+            </div>
+            <div>
+              <div className="text-white font-bold text-sm mb-3">고객센터</div>
+              <ul className="space-y-2 text-sm text-ink-400">
+                <li>평일 10:00 - 18:00</li>
+                <li>help@minssaem.co.kr</li>
+                <li>파고다 종로 · 강남점 운영</li>
+              </ul>
+            </div>
+          </div>
+          <div className="mt-12 pt-6 border-t border-ink-800 text-xs text-ink-500 leading-relaxed">
+            <p>민쌤의 비즈니스 영어 · 대표 강사 안성민(MIN) · 파고다 강남·종로 비즈니스 회화 대표 강사</p>
+            <p className="mt-1">서울특별시 종로구 · 강남구 · © 2026 Minssaem Business English. All rights reserved.</p>
+            <p className="mt-2 text-ink-600">본 사이트는 프로토타입이며 실제 결제는 이루어지지 않습니다.</p>
+          </div>
+        </div>
+      </footer>
+    );
+
+    // ========================================
+    // 🧩 CourseCard
+    // ========================================
+    const CourseCard = ({ course }) => (
+      <Link to={`/courses/${course.id}`} className="group block">
+        <Card className="overflow-hidden h-full flex flex-col transition-all duration-200 group-hover:shadow-lift group-hover:-translate-y-1">
+          <div className="relative">
+            <Thumb course={course} className="h-40" />
+            {course.badge && (
+              <Badge className="absolute top-3 left-3 bg-white text-accent-600 shadow-soft">{course.badge}</Badge>
+            )}
+          </div>
+          <div className="p-5 flex flex-col flex-1">
+            <div className="text-xs font-semibold text-ink-400 mb-2">{course.level} · {course.tag}</div>
+            <h3 className="font-bold text-ink-900 text-lg leading-snug">{course.title}</h3>
+            <p className="mt-1.5 text-sm text-ink-500 leading-relaxed line-clamp-2 flex-1">{course.desc}</p>
+            <div className="mt-3 flex items-center gap-2 text-sm">
+              <Stars rating={course.rating} />
+              <span className="font-bold text-ink-800">{course.rating}</span>
+              <span className="text-ink-400">({course.reviews.toLocaleString('ko-KR')})</span>
+            </div>
+            <div className="mt-4 pt-4 border-t border-ink-100 flex items-end justify-between">
+              <div>
+                <span className="text-xs text-ink-400 line-through">{won(course.price)}</span>
+                <div className="text-xl font-extrabold text-ink-900">{won(course.salePrice)}</div>
+                <span className="text-[11px] text-ink-400">{course.priceNote}</span>
+              </div>
+              <span className="text-accent-600 text-sm font-semibold inline-flex items-center gap-1">자세히 <Icon name="arrow" className="w-4 h-4" /></span>
+            </div>
+          </div>
+        </Card>
+      </Link>
+    );
+
+    // ========================================
+    // 📄 HomePage
+    // ========================================
+    const HomePage = () => {
+      const track1 = findCourse('track1');
+      const track2 = findCourse('track2');
+      return (
+        <div>
+          {/* Hero */}
+          <section className="relative overflow-hidden bg-ink-950 text-white">
+            <div className="absolute inset-0 opacity-30"
+              style={{ backgroundImage: 'radial-gradient(circle at 15% 10%, #2456e6 0, transparent 40%), radial-gradient(circle at 85% 80%, #1d3681 0, transparent 45%)' }} />
+            <div className="relative max-w-6xl mx-auto px-4 sm:px-6 py-20 sm:py-28 grid lg:grid-cols-2 gap-12 items-center">
+              <div className="fade-up">
+                <Badge className="bg-white/10 text-accent-200 border border-white/10 mb-6">파고다 강남·종로 비즈니스 회화 대표 강사</Badge>
+                <h1 className="text-3xl sm:text-4xl md:text-5xl font-extrabold leading-[1.15] tracking-tight">
+                  민쌤의 <span className="text-accent-300">상황별로 배우는</span><br/>
+                  비즈니스 영어
+                </h1>
+                <p className="mt-6 text-lg text-ink-200 leading-relaxed max-w-lg">
+                  일하다가 외국인을 만나 순간 얼어붙은 적 있으시죠?
+                  머리로 아는 영어가 아닌, 입으로 나오는 영어를 만듭니다.
+                </p>
+                <div className="mt-8 flex flex-col sm:flex-row gap-3">
+                  <Button as="a" href="#/courses" size="lg" className="w-full sm:w-auto">수강 신청하기 <Icon name="arrow" className="w-5 h-5" /></Button>
+                  <Button as="a" href="#/instructor" size="lg" variant="secondary" className="w-full sm:w-auto bg-white/10 text-white border-white/20 hover:bg-white/20">강사 소개 보기</Button>
+                </div>
+                <div className="mt-10 flex items-center gap-6 text-sm text-ink-300">
+                  <div><span className="text-2xl font-extrabold text-white">2가지</span> 트랙 운영</div>
+                  <div className="w-px h-8 bg-white/15" />
+                  <div><span className="text-2xl font-extrabold text-white">4.9</span> / 5.0 평점</div>
+                  <div className="w-px h-8 bg-white/15" />
+                  <div><span className="text-2xl font-extrabold text-white">LinkedIn 5만+</span></div>
+                </div>
+              </div>
+
+              <div className="fade-up hidden lg:block">
+                <div className="relative">
+                  <Card className="p-0 overflow-hidden rotate-1 shadow-lift bg-white text-ink-900">
+                    <div className="bg-gradient-to-br from-ink-800 to-ink-950 p-8 flex items-center gap-5">
+                      <div className="w-20 h-20 rounded-full bg-white/10 border-2 border-white/20 grid place-items-center shrink-0"><Icon name="user" className="w-10 h-10 text-white/80" /></div>
+                      <div>
+                        <div className="text-white/60 text-xs font-semibold">글로벌 기업 출신 강사</div>
+                        <div className="text-white text-xl font-extrabold mt-0.5">안성민 <span className="text-white/60 text-sm">(MIN쌤)</span></div>
+                        <div className="text-white/70 text-sm mt-0.5">前 Nike · H&amp;M 마케팅</div>
+                      </div>
+                    </div>
+                    <div className="p-6">
+                      <div className="flex flex-wrap gap-2">
+                        <Badge className="bg-accent-50 text-accent-600">파고다 종로 대표강사</Badge>
+                        <Badge className="bg-accent-50 text-accent-600">파고다 강남 대표강사</Badge>
+                      </div>
+                      <p className="mt-4 text-sm text-ink-600 leading-relaxed">삼성물산·삼성 E&amp;A·SK하이닉스·CJ ENM 등 대기업 임직원 대상 비즈니스 영어 출강.</p>
+                    </div>
+                  </Card>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          {/* Logos */}
+          <section className="bg-white border-b border-ink-100">
+            <div className="max-w-6xl mx-auto px-4 sm:px-6 py-8">
+              <p className="text-center text-sm text-ink-400 font-medium mb-5">대기업 임직원 비즈니스 영어 교육 파트너</p>
+              <div className="flex flex-wrap items-center justify-center gap-x-10 gap-y-4">
+                {LOGOS.map(l => (
+                  <span key={l} className="text-ink-300 font-extrabold tracking-widest text-lg select-none">{l}</span>
+                ))}
+              </div>
+            </div>
+          </section>
+
+          {/* Why Min */}
+          <section className="bg-accent-50 border-b border-accent-100">
+            <div className="max-w-3xl mx-auto px-4 sm:px-6 py-20 text-center">
+              <div className="text-accent-600 font-bold text-sm tracking-widest uppercase mb-4">Why Min?</div>
+              <div className="inline-flex items-center gap-2 text-accent-600 mb-4"><Icon name="snow" className="w-6 h-6" /></div>
+              <h2 className="text-2xl sm:text-3xl font-extrabold text-ink-900 leading-snug">
+                일하다가 외국인을 만나<br/>순간 얼어붙은 적 있으시죠!?
+              </h2>
+              <div className="mt-8 text-lg text-ink-600 leading-relaxed">
+                <span className="text-4xl text-accent-300 font-serif leading-none">“</span>
+                <p className="mt-2">입사 첫 미팅에서 학교에서 배운 영어가<br/>전혀 통하지 않는 걸 깨달았을 때 느꼈습니다.</p>
+                <p className="mt-4 font-bold text-ink-900">비즈니스 영어는 교과서가 아니라<br/>현장에서 배우는 것이라고.</p>
+              </div>
+            </div>
+          </section>
+
+          {/* 머리로 아는 영어 → 입으로 나오는 영어 */}
+          <section className="max-w-5xl mx-auto px-4 sm:px-6 py-20">
+            <SectionTitle center eyebrow="민쌤과 함께라면" title="머리로 아는 영어가 아닌, 입으로 나오는 영어"
+              desc="직역한 영어를 원어민이 실제로 쓰는 자연스러운 표현으로 바꿔 드립니다." />
+            <div className="mt-12 grid gap-4 sm:grid-cols-2">
+              {TRANSFORMS.map((t, i) => (
+                <Card key={i} className="p-6">
+                  <div className="text-ink-400">
+                    <div className="font-semibold text-ink-500 line-through decoration-ink-300">{t.before}</div>
+                    <div className="text-xs text-ink-400 mt-0.5">{t.beforeKo}</div>
+                  </div>
+                  <div className="my-3 flex justify-center"><Icon name="chevron" className="w-5 h-5 text-accent-500" /></div>
+                  <div>
+                    <div className="font-extrabold text-ink-900">{t.after}</div>
+                    <div className="text-sm text-accent-600 mt-1">{t.afterKo}</div>
+                  </div>
+                </Card>
+              ))}
+            </div>
+          </section>
+
+          {/* 두 가지 트랙 */}
+          <section className="bg-white border-y border-ink-100">
+            <div className="max-w-6xl mx-auto px-4 sm:px-6 py-20">
+              <SectionTitle center eyebrow="Two Tracks" title="비즈니스 영어 수업은 두 가지 트랙으로 운영됩니다"
+                desc="수강 목적에 맞는 비즈니스 영어 수업을 선택하세요." />
+              <div className="mt-12 grid gap-6 lg:grid-cols-2">
+                {[track1, track2].map((c, idx) => (
+                  <Card key={c.id} className="p-7 flex flex-col">
+                    <div className="flex items-center gap-3">
+                      <span className={`px-3 py-1 rounded-lg text-white text-sm font-extrabold ${idx === 0 ? 'bg-ink-700' : 'bg-accent-600'}`}>TRACK 0{idx + 1}</span>
+                      <span className="text-xs font-bold text-ink-400">{c.tag}</span>
+                    </div>
+                    <h3 className="mt-4 text-xl font-extrabold text-ink-900">{c.title}</h3>
+                    <ul className="mt-5 space-y-2.5">
+                      {c.whoFor.map((w, j) => (
+                        <li key={j} className="flex items-center gap-2.5 text-ink-700">
+                          <span className={`w-5 h-5 rounded-full grid place-items-center shrink-0 ${idx === 0 ? 'bg-ink-100 text-ink-600' : 'bg-accent-100 text-accent-600'}`}><Icon name="check" className="w-3.5 h-3.5" /></span>
+                          {w}
+                        </li>
+                      ))}
+                    </ul>
+                    <div className={`mt-5 rounded-xl p-4 text-sm flex items-start gap-3 ${idx === 0 ? 'bg-ink-50 text-ink-600' : 'bg-accent-50 text-accent-700'}`}>
+                      <Icon name={idx === 0 ? 'book' : 'chat'} className="w-5 h-5 shrink-0 mt-0.5" /> {c.method}
+                    </div>
+                    <div className="mt-6 pt-5 border-t border-ink-100 flex items-center justify-between">
+                      <div>
+                        <span className="text-xs text-ink-400 line-through">{won(c.price)}</span>
+                        <div className="text-lg font-extrabold text-ink-900">{won(c.salePrice)} <span className="text-xs font-normal text-ink-400">/ {c.priceNote}</span></div>
+                      </div>
+                      <Button as="a" href={`#/courses/${c.id}`} variant={idx === 0 ? 'dark' : 'primary'}>자세히 보기 <Icon name="arrow" className="w-4 h-4" /></Button>
+                    </div>
+                  </Card>
+                ))}
+              </div>
+              <Card className="mt-6 p-5 flex flex-col sm:flex-row items-start sm:items-center gap-4 bg-ink-50 border-ink-100">
+                <div className="flex items-start gap-3 flex-1">
+                  <Icon name="refresh" className="w-6 h-6 text-accent-600 shrink-0 mt-0.5" />
+                  <div className="text-sm text-ink-600 leading-relaxed">
+                    <b className="text-ink-900">교차 수강</b> 주중·주말 / 파고다 종로·강남점 사이 자유롭게 가능 · 대면 수업 결석 시 <b className="text-ink-900">ZOOM LIVE</b> 참여 가능
+                  </div>
+                </div>
+                <Badge className="bg-white text-accent-600 border border-accent-100 shrink-0">언제든 피드백 제공</Badge>
+              </Card>
+            </div>
+          </section>
+
+          {/* 강의 특징 */}
+          <section className="max-w-6xl mx-auto px-4 sm:px-6 py-20">
+            <SectionTitle eyebrow="Why Minssaem" title="다른 영어 수업과 무엇이 다른가요"
+              desc="실무에 바로 쓰는 것에만 집중했습니다." />
+            <div className="mt-12 grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
+              {FEATURES.map((f, i) => (
+                <div key={i}>
+                  <div className="w-12 h-12 rounded-2xl bg-ink-900 text-white grid place-items-center mb-4"><Icon name={f.icon} className="w-6 h-6" /></div>
+                  <h3 className="font-bold text-ink-900 text-lg">{f.title}</h3>
+                  <p className="mt-2 text-sm text-ink-500 leading-relaxed">{f.desc}</p>
+                </div>
+              ))}
+            </div>
+          </section>
+
+          {/* 커리큘럼 미리보기 */}
+          <section className="bg-white border-y border-ink-100">
+            <div className="max-w-6xl mx-auto px-4 sm:px-6 py-20">
+              <div className="flex flex-wrap items-end justify-between gap-4">
+                <SectionTitle eyebrow="Curriculum" title="상황별 커리큘럼 미리보기"
+                  desc={`'${track2.title}' 트랙의 커리큘럼 일부입니다.`} />
+                <Link to={`/courses/${track2.id}`} className="text-accent-600 font-semibold inline-flex items-center gap-1 hover:gap-2 transition-all">전체 커리큘럼 보기 <Icon name="arrow" className="w-4 h-4" /></Link>
+              </div>
+              <div className="mt-10 grid gap-4 md:grid-cols-2">
+                {track2.curriculum.map((ch, i) => (
+                  <Card key={i} className="p-6">
+                    <div className="flex items-center gap-3 mb-4">
+                      <span className="w-8 h-8 rounded-lg bg-accent-50 text-accent-600 grid place-items-center font-bold text-sm">{i + 1}</span>
+                      <h3 className="font-bold text-ink-900">{ch.chapter}</h3>
+                    </div>
+                    <ul className="space-y-2.5">
+                      {ch.lessons.map((l, j) => (
+                        <li key={j} className="flex items-start gap-2.5 text-sm text-ink-600">
+                          <Icon name="play" className="w-4 h-4 text-ink-300 mt-0.5 shrink-0" /> {l}
+                        </li>
+                      ))}
+                    </ul>
+                  </Card>
+                ))}
+              </div>
+            </div>
+          </section>
+
+          {/* 수강 후기 */}
+          <section className="max-w-6xl mx-auto px-4 sm:px-6 py-20">
+            <div className="flex flex-wrap items-end justify-between gap-4">
+              <SectionTitle eyebrow="Reviews" title="수강생들이 먼저 추천하는 이유"
+                desc="실무에 바로 적용한 분들의 진짜 후기입니다." />
+              <Link to="/reviews" className="text-accent-600 font-semibold inline-flex items-center gap-1 hover:gap-2 transition-all">후기 더 보기 <Icon name="arrow" className="w-4 h-4" /></Link>
+            </div>
+            <div className="mt-10 grid gap-5 md:grid-cols-3">
+              {REVIEWS.slice(0, 3).map((r, i) => <ReviewCard key={i} r={r} />)}
+            </div>
+          </section>
+
+          {/* 강사 소개 teaser */}
+          <section className="max-w-6xl mx-auto px-4 sm:px-6 pb-20">
+            <Card className="overflow-hidden">
+              <div className="grid md:grid-cols-5">
+                <div className="md:col-span-2 bg-gradient-to-br from-ink-800 to-ink-950 p-10 flex items-center justify-center">
+                  <div className="w-36 h-36 rounded-full bg-white/10 border-4 border-white/20 grid place-items-center text-white">
+                    <Icon name="user" className="w-16 h-16" />
+                  </div>
+                </div>
+                <div className="md:col-span-3 p-8 sm:p-10">
+                  <div className="text-accent-600 font-bold text-sm tracking-widest uppercase mb-2">Instructor</div>
+                  <h3 className="text-2xl font-extrabold text-ink-900">안성민 <span className="text-ink-400 text-lg font-semibold">(MIN쌤)</span></h3>
+                  <p className="mt-1 text-ink-500 font-medium">파고다 강남·종로 비즈니스 회화 대표 강사</p>
+                  <p className="mt-4 text-ink-600 leading-relaxed">
+                    "영국 Coventry University에서 광고·마케팅을 전공하고 Nike, H&amp;M 마케팅 부서에서 근무했습니다.
+                    글로벌 비즈니스 현장에서 직접 부딪히며 익힌, 진짜 쓰는 표현만 가르칩니다."
+                  </p>
+                  <div className="mt-6"><Button as="a" href="#/instructor" variant="secondary">강사 소개 자세히 보기 <Icon name="arrow" className="w-4 h-4" /></Button></div>
+                </div>
+              </div>
+            </Card>
+          </section>
+
+          {/* 최종 CTA */}
+          <section className="max-w-6xl mx-auto px-4 sm:px-6 pb-20">
+            <div className="relative overflow-hidden rounded-3xl bg-ink-950 text-white px-6 sm:px-12 py-16 text-center">
+              <div className="absolute inset-0 opacity-40" style={{ backgroundImage: 'radial-gradient(circle at 80% 20%, #2456e6 0, transparent 45%)' }} />
+              <div className="relative">
+                <h2 className="text-2xl sm:text-4xl font-extrabold leading-tight">나에게 맞는 트랙을 선택하세요!</h2>
+                <p className="mt-4 text-ink-200 text-lg max-w-xl mx-auto">오늘 배운 문장, 내일 회의에서. 실무 영어 자신감을 만드세요.</p>
+                <div className="mt-8"><Button as="a" href="#/courses" size="lg">강좌 둘러보기 <Icon name="arrow" className="w-5 h-5" /></Button></div>
+              </div>
+            </div>
+          </section>
+        </div>
+      );
+    };
+
+    const ReviewCard = ({ r }) => (
+      <Card className="p-6 flex flex-col">
+        <div className="flex items-center justify-between">
+          <Stars rating={r.rating} />
+          <Badge className="bg-ink-50 text-ink-500">{r.course}</Badge>
+        </div>
+        <h4 className="mt-3 font-extrabold text-ink-900">“{r.title}”</h4>
+        <p className="mt-2 text-ink-600 text-sm leading-relaxed flex-1">{r.text}</p>
+        <div className="mt-5 pt-4 border-t border-ink-100 text-sm text-ink-500 font-medium">— {r.name} · {r.role}</div>
+      </Card>
+    );
+
+    // ========================================
+    // 📄 CoursesPage
+    // ========================================
+    const CoursesPage = () => (
+      <div className="max-w-6xl mx-auto px-4 sm:px-6 py-14">
+        <SectionTitle eyebrow="Courses" title="민쌤의 상황별 비즈니스 영어"
+          desc="두 가지 트랙과 1:1 프리미엄 코칭 중, 나에게 맞는 수업을 선택하세요." />
+        <div className="mt-12 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+          {COURSES.map(c => <CourseCard key={c.id} course={c} />)}
+        </div>
+      </div>
+    );
+
+    // ========================================
+    // 📄 CourseDetailPage
+    // ========================================
+    const CourseDetailPage = ({ id }) => {
+      const course = findCourse(id);
+      const { navigate } = useRouter();
+      const { addToCart, inCart, isPurchased } = useStore();
+      const toast = useToast();
+      if (!course) return <NotFound />;
+
+      const purchased = isPurchased(course.id);
+      const totalLessons = course.curriculum.reduce((s, ch) => s + ch.lessons.length, 0);
+      const courseReviews = REVIEWS.filter(r => r.course === course.title).slice(0, 3);
+
+      const handleAdd = () => {
+        if (purchased) return;
+        addToCart(course.id);
+        toast(inCart(course.id) ? '이미 장바구니에 있어요' : '장바구니에 담았어요');
+      };
+      const handleBuy = () => { if (!purchased) { addToCart(course.id); navigate('/checkout'); } };
+
+      return (
+        <div>
+          {/* header */}
+          <div className="bg-ink-950 text-white">
+            <div className="max-w-6xl mx-auto px-4 sm:px-6 py-12 grid lg:grid-cols-3 gap-8">
+              <div className="lg:col-span-2">
+                <div className="flex items-center gap-2 text-sm text-ink-300 mb-4">
+                  <Link to="/courses" className="hover:text-white">강좌 목록</Link>
+                  <Icon name="chevron" className="w-4 h-4 -rotate-90" />
+                  <span>{course.badge}</span>
+                </div>
+                <h1 className="text-3xl sm:text-4xl font-extrabold leading-tight">{course.title}</h1>
+                <p className="mt-3 text-lg text-ink-200">{course.subtitle}</p>
+                <div className="mt-4 flex flex-wrap gap-2">
+                  {course.hashtags.map((h, i) => <Badge key={i} className="bg-white/10 text-accent-200 border border-white/10">{h}</Badge>)}
+                </div>
+                <div className="mt-6 flex flex-wrap items-center gap-x-6 gap-y-2 text-sm">
+                  <span className="flex items-center gap-1.5"><Stars rating={course.rating} /><b className="text-white">{course.rating}</b><span className="text-ink-300">({course.reviews.toLocaleString('ko-KR')}개 후기)</span></span>
+                  <span className="text-ink-300 flex items-center gap-1.5"><Icon name="user" className="w-4 h-4" /> {course.students.toLocaleString('ko-KR')}명 수강</span>
+                  <span className="text-ink-300 flex items-center gap-1.5"><Icon name="clock" className="w-4 h-4" /> {course.hours}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="max-w-6xl mx-auto px-4 sm:px-6 py-12 grid lg:grid-cols-3 gap-10">
+            {/* main */}
+            <div className="lg:col-span-2 space-y-12">
+              <Thumb course={course} className="h-56 sm:h-64 rounded-2xl" />
+
+              <section>
+                <h2 className="text-xl font-extrabold text-ink-900 mb-5">이 수업의 특징</h2>
+                <div className="space-y-3">
+                  {course.features.map((f, i) => (
+                    <Card key={i} className="p-5 flex gap-4">
+                      <span className="w-8 h-8 rounded-lg bg-accent-50 text-accent-600 grid place-items-center font-extrabold shrink-0">{i + 1}</span>
+                      <div>
+                        <h3 className="font-bold text-ink-900">{f.t}</h3>
+                        <p className="mt-1 text-sm text-ink-500 leading-relaxed">{f.d}</p>
+                      </div>
+                    </Card>
+                  ))}
+                </div>
+              </section>
+
+              <section>
+                <h2 className="text-xl font-extrabold text-ink-900 mb-5">이 수업을 들으면</h2>
+                <div className="grid gap-3">
+                  {course.outcomes.map((o, i) => (
+                    <div key={i} className="flex items-start gap-3 bg-white rounded-xl border border-ink-100 p-4">
+                      <span className="w-6 h-6 rounded-full bg-accent-50 text-accent-600 grid place-items-center shrink-0 mt-0.5"><Icon name="check" className="w-4 h-4" /></span>
+                      <span className="text-ink-700">{o}</span>
+                    </div>
+                  ))}
+                </div>
+              </section>
+
+              <section>
+                <h2 className="text-xl font-extrabold text-ink-900 mb-5">이런 분께 추천해요</h2>
+                <ul className="space-y-2.5">
+                  {course.whoFor.map((a, i) => (
+                    <li key={i} className="flex items-start gap-2.5 text-ink-600"><Icon name="user" className="w-5 h-5 text-ink-300 mt-0.5 shrink-0" /> {a}</li>
+                  ))}
+                </ul>
+              </section>
+
+              <section>
+                <h2 className="text-xl font-extrabold text-ink-900 mb-5">커리큘럼</h2>
+                <div className="space-y-3">
+                  {course.curriculum.map((ch, i) => <CurriculumChapter key={i} ch={ch} index={i} defaultOpen={i === 0} />)}
+                </div>
+              </section>
+
+              {courseReviews.length > 0 && (
+                <section>
+                  <h2 className="text-xl font-extrabold text-ink-900 mb-5">수강 후기</h2>
+                  <div className="grid sm:grid-cols-2 gap-4">
+                    {courseReviews.map((r, i) => (
+                      <Card key={i} className="p-5">
+                        <Stars rating={r.rating} />
+                        <h4 className="mt-2 font-bold text-ink-900 text-sm">“{r.title}”</h4>
+                        <p className="mt-2 text-ink-600 text-sm leading-relaxed">{r.text}</p>
+                        <div className="mt-4 text-xs text-ink-400">{r.name} · {r.role}</div>
+                      </Card>
+                    ))}
+                  </div>
+                </section>
+              )}
+            </div>
+
+            {/* sticky buy box */}
+            <aside className="lg:col-span-1">
+              <div className="lg:sticky lg:top-24">
+                <Card className="p-6">
+                  <div className="flex items-baseline gap-2">
+                    <span className="text-sm text-ink-400 line-through">{won(course.price)}</span>
+                    <Badge className="bg-red-50 text-red-600">{Math.round((1 - course.salePrice / course.price) * 100)}% 할인</Badge>
+                  </div>
+                  <div className="text-3xl font-extrabold text-ink-900 mt-1">{won(course.salePrice)}</div>
+                  <div className="text-xs text-ink-400 mt-0.5">{course.priceNote}</div>
+                  <ul className="mt-5 space-y-2.5 text-sm text-ink-600">
+                    <li className="flex items-center gap-2"><Icon name="clock" className="w-4 h-4 text-ink-300" /> {course.hours}</li>
+                    <li className="flex items-center gap-2"><Icon name="refresh" className="w-4 h-4 text-ink-300" /> 종로·강남 교차 수강 가능</li>
+                    <li className="flex items-center gap-2"><Icon name="globe" className="w-4 h-4 text-ink-300" /> 결석 시 ZOOM LIVE 보강</li>
+                    <li className="flex items-center gap-2"><Icon name="chat" className="w-4 h-4 text-ink-300" /> 언제든 피드백 제공</li>
+                  </ul>
+                  <div className="mt-6 space-y-2.5">
+                    {purchased ? (
+                      <>
+                        <div className="text-center bg-green-50 text-green-700 font-semibold py-3 rounded-xl">이미 수강 중인 강좌입니다</div>
+                        <Button variant="dark" className="w-full" as="a" href="#/my-courses">내 강의에서 학습하기</Button>
+                      </>
+                    ) : (
+                      <>
+                        <Button variant="primary" size="lg" className="w-full" onClick={handleBuy}>바로 수강신청</Button>
+                        <Button variant="secondary" className="w-full" onClick={handleAdd}>
+                          <Icon name="cart" className="w-5 h-5" /> {inCart(course.id) ? '장바구니에 담김' : '장바구니 담기'}
+                        </Button>
+                      </>
+                    )}
+                  </div>
+                  <p className="mt-4 text-xs text-ink-400 text-center">수강 목적에 맞는 트랙을 선택하세요</p>
+                </Card>
+              </div>
+            </aside>
+          </div>
+        </div>
+      );
+    };
+
+    const CurriculumChapter = ({ ch, index, defaultOpen }) => {
+      const [open, setOpen] = useState(defaultOpen);
+      return (
+        <Card className="overflow-hidden">
+          <button className="w-full flex items-center justify-between gap-3 p-5 text-left hover:bg-ink-50 transition-colors" onClick={() => setOpen(o => !o)} aria-expanded={open}>
+            <span className="flex items-center gap-3">
+              <span className="w-8 h-8 rounded-lg bg-accent-50 text-accent-600 grid place-items-center font-bold text-sm shrink-0">{index + 1}</span>
+              <span className="font-bold text-ink-900">{ch.chapter}</span>
+            </span>
+            <span className="flex items-center gap-3 shrink-0">
+              <span className="text-xs text-ink-400 hidden sm:block">{ch.lessons.length}강</span>
+              <Icon name="chevron" className={`w-5 h-5 text-ink-400 transition-transform ${open ? 'rotate-180' : ''}`} />
+            </span>
+          </button>
+          {open && (
+            <ul className="px-5 pb-5 space-y-2.5 border-t border-ink-100 pt-4">
+              {ch.lessons.map((l, j) => (
+                <li key={j} className="flex items-center gap-3 text-sm text-ink-600">
+                  <Icon name="play" className="w-4 h-4 text-ink-300 shrink-0" /> {l}
+                </li>
+              ))}
+            </ul>
+          )}
+        </Card>
+      );
+    };
+
+    // ========================================
+    // 📄 InstructorPage
+    // ========================================
+    const CREDENTIALS = [
+      '영국 Coventry University 광고·마케팅 전공',
+      '前 Nike · H&M 마케팅 부서 근무',
+      'LinkedIn 5만+ 팔로워',
+      'Instagram · LinkedIn 영어 교육 콘텐츠 운영',
+      '삼성물산, 삼성 E&A, SK하이닉스, CJ ENM 등 대기업 임직원 대상 비즈니스 영어 출강',
+      '파고다 강남·종로 비즈니스 회화 대표 강사',
+      '1:1 Executive & Business English Coaching 다수 진행'
+    ];
+
+    const InstructorPage = () => (
+      <div>
+        <div className="bg-ink-950 text-white">
+          <div className="max-w-5xl mx-auto px-4 sm:px-6 py-16 grid md:grid-cols-3 gap-10 items-center">
+            <div className="flex justify-center">
+              <div className="w-44 h-44 rounded-full bg-white/10 border-4 border-white/20 grid place-items-center"><Icon name="user" className="w-20 h-20 text-white/80" /></div>
+            </div>
+            <div className="md:col-span-2 text-center md:text-left">
+              <div className="text-accent-300 font-bold text-sm tracking-widest uppercase mb-2">Instructor</div>
+              <h1 className="text-3xl sm:text-4xl font-extrabold">안성민 <span className="text-ink-300 text-xl font-semibold">(Sungmin "MIN" Ahn)</span></h1>
+              <p className="mt-2 text-ink-200 text-lg">파고다 강남·종로 비즈니스 회화 대표 강사 · 글로벌 기업 출신</p>
+              <div className="mt-6 flex flex-wrap gap-3 justify-center md:justify-start">
+                <Badge className="bg-white/10 text-white border border-white/15">파고다 종로 비즈니스 강사</Badge>
+                <Badge className="bg-white/10 text-white border border-white/15">파고다 강남 비즈니스 강사</Badge>
+                <Badge className="bg-white/10 text-white border border-white/15">LinkedIn 5만+</Badge>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="max-w-4xl mx-auto px-4 sm:px-6 py-14 space-y-12">
+          <section>
+            <h2 className="text-2xl font-extrabold text-ink-900 mb-4">글로벌 비즈니스 현장을 경험한 영어 강사</h2>
+            <Card className="p-6 sm:p-8">
+              <ul className="space-y-4">
+                {CREDENTIALS.map((c, i) => (
+                  <li key={i} className="flex items-start gap-3">
+                    <span className="w-6 h-6 rounded-full bg-accent-50 text-accent-600 grid place-items-center shrink-0 mt-0.5"><Icon name="check" className="w-4 h-4" /></span>
+                    <span className="text-ink-700 leading-relaxed">{c}</span>
+                  </li>
+                ))}
+              </ul>
+            </Card>
+          </section>
+
+          <section>
+            <h2 className="text-2xl font-extrabold text-ink-900 mb-4">대기업 임직원 교육 파트너</h2>
+            <Card className="p-8">
+              <div className="flex flex-wrap items-center justify-center gap-x-10 gap-y-4">
+                {LOGOS.map(l => <span key={l} className="text-ink-300 font-extrabold tracking-widest text-lg select-none">{l}</span>)}
+              </div>
+              <p className="mt-6 text-center text-sm text-ink-500">대기업 임원 대상 강의를 다수 진행하며, 실무에서 통하는 비즈니스 영어를 전합니다.</p>
+            </Card>
+          </section>
+
+          <section>
+            <h2 className="text-2xl font-extrabold text-ink-900 mb-4">티칭 철학</h2>
+            <Card className="p-8 bg-accent-50 border-accent-100">
+              <blockquote className="text-lg text-ink-700 leading-relaxed">
+                "일하다가 외국인을 만나 순간 얼어붙은 경험, 누구나 있습니다.
+                저는 여러분이 <b className="text-ink-900">머리로 아는 영어가 아닌, 입으로 나오는 영어</b>를 하도록 돕습니다.
+                외운 표현이 실제 상황에서 튀어나오도록, 철저히 상황 중심으로 설계했습니다."
+              </blockquote>
+              <div className="mt-5 font-semibold text-ink-900">— 안성민 (MIN쌤)</div>
+            </Card>
+          </section>
+
+          <section>
+            <h2 className="text-2xl font-extrabold text-ink-900 mb-4">민쌤의 강좌</h2>
+            <div className="grid gap-6 sm:grid-cols-2">
+              {COURSES.slice(0, 2).map(c => <CourseCard key={c.id} course={c} />)}
+            </div>
+            <div className="mt-6"><Button as="a" href="#/courses" variant="secondary">전체 강좌 보기 <Icon name="arrow" className="w-4 h-4" /></Button></div>
+          </section>
+        </div>
+      </div>
+    );
+
+    // ========================================
+    // 📄 ReviewsPage
+    // ========================================
+    const ReviewsPage = () => {
+      const [filter, setFilter] = useState('전체');
+      const courseNames = ['전체', ...COURSES.map(c => c.title)];
+      const filtered = filter === '전체' ? REVIEWS : REVIEWS.filter(r => r.course === filter);
+      const avg = (REVIEWS.reduce((s, r) => s + r.rating, 0) / REVIEWS.length).toFixed(1);
+
+      return (
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 py-14">
+          <SectionTitle center eyebrow="Reviews" title="BEST 수강후기"
+            desc="수강생들이 먼저 추천하는 이유. 실무에 바로 적용한 직장인들의 생생한 후기입니다." />
+
+          <div className="mt-8 flex items-center justify-center gap-8">
+            <div className="text-center">
+              <div className="text-4xl font-extrabold text-ink-900">{avg}</div>
+              <Stars rating={Number(avg)} className="w-5 h-5" />
+              <div className="text-sm text-ink-400 mt-1">{REVIEWS.length.toLocaleString('ko-KR')}개 후기</div>
+            </div>
+          </div>
+
+          <div className="mt-10 flex flex-wrap gap-2 justify-center no-scrollbar">
+            {courseNames.map(n => (
+              <button key={n} onClick={() => setFilter(n)}
+                className={`px-4 py-2 rounded-full text-sm font-semibold border transition-colors ${filter === n ? 'bg-ink-900 text-white border-ink-900' : 'bg-white text-ink-600 border-ink-200 hover:border-ink-300'}`}>
+                {n}
+              </button>
+            ))}
+          </div>
+
+          <div className="mt-10 grid gap-5 md:grid-cols-2 lg:grid-cols-3">
+            {filtered.map((r, i) => <ReviewCard key={i} r={r} />)}
+          </div>
+          {filtered.length === 0 && <p className="text-center text-ink-400 py-16">해당 강좌의 후기가 아직 없어요.</p>}
+        </div>
+      );
+    };
+
+    // ========================================
+    // 📄 CartPage
+    // ========================================
+    const CartPage = () => {
+      const { cart, removeFromCart, isPurchased } = useStore();
+      const { navigate } = useRouter();
+      const items = cart.map(findCourse).filter(Boolean);
+      const total = items.reduce((s, c) => s + c.salePrice, 0);
+      const original = items.reduce((s, c) => s + c.price, 0);
+
+      if (items.length === 0) return (
+        <EmptyState icon="cart" title="장바구니가 비어 있어요" desc="관심 있는 강좌를 담아보세요." to="/courses" cta="강좌 둘러보기" />
+      );
+
+      return (
+        <div className="max-w-5xl mx-auto px-4 sm:px-6 py-14">
+          <h1 className="text-2xl sm:text-3xl font-extrabold text-ink-900 mb-8">장바구니 <span className="text-accent-600">{items.length}</span></h1>
+          <div className="grid lg:grid-cols-3 gap-8">
+            <div className="lg:col-span-2 space-y-4">
+              {items.map(c => (
+                <Card key={c.id} className="p-4 flex gap-4 items-center">
+                  <Link to={`/courses/${c.id}`} className="shrink-0"><Thumb course={c} className="w-28 h-20 rounded-xl hidden sm:block" /></Link>
+                  <div className="flex-1 min-w-0">
+                    <div className="text-xs text-ink-400">{c.badge} · {c.level}</div>
+                    <Link to={`/courses/${c.id}`} className="font-bold text-ink-900 hover:text-accent-600 line-clamp-1">{c.title}</Link>
+                    <div className="mt-1 font-extrabold text-ink-900">{won(c.salePrice)} <span className="text-xs text-ink-400 font-normal line-through">{won(c.price)}</span></div>
+                    {isPurchased(c.id) && <span className="text-xs text-green-600 font-semibold">이미 구매한 강좌</span>}
+                  </div>
+                  <button onClick={() => removeFromCart(c.id)} className="p-2.5 rounded-lg text-ink-400 hover:text-red-500 hover:bg-red-50 shrink-0" aria-label="삭제"><Icon name="trash" className="w-5 h-5" /></button>
+                </Card>
+              ))}
+            </div>
+            <aside>
+              <div className="lg:sticky lg:top-24">
+                <Card className="p-6">
+                  <h2 className="font-bold text-ink-900 mb-4">결제 금액</h2>
+                  <div className="space-y-2.5 text-sm">
+                    <div className="flex justify-between text-ink-500"><span>정가</span><span className="line-through">{won(original)}</span></div>
+                    <div className="flex justify-between text-ink-500"><span>할인</span><span className="text-accent-600 font-semibold">- {won(original - total)}</span></div>
+                    <div className="pt-3 border-t border-ink-100 flex justify-between items-center">
+                      <span className="font-bold text-ink-900">총 결제금액</span>
+                      <span className="text-2xl font-extrabold text-ink-900">{won(total)}</span>
+                    </div>
+                  </div>
+                  <Button variant="primary" size="lg" className="w-full mt-6" onClick={() => navigate('/checkout')}>결제하기</Button>
+                  <Link to="/courses" className="block text-center text-sm text-ink-500 mt-4 hover:text-ink-800">계속 둘러보기</Link>
+                </Card>
+              </div>
+            </aside>
+          </div>
+        </div>
+      );
+    };
+
+    // ========================================
+    // 📄 CheckoutPage
+    // ========================================
+    const CheckoutPage = () => {
+      const { cart, purchase } = useStore();
+      const { navigate } = useRouter();
+      const items = cart.map(findCourse).filter(Boolean);
+      const total = items.reduce((s, c) => s + c.salePrice, 0);
+      const [method, setMethod] = useState('card');
+      const [done, setDone] = useState(false);
+      const [form, setForm] = useState({ name: '', email: '', card: '' });
+
+      const submit = (e) => {
+        e.preventDefault();
+        purchase(items.map(c => c.id));
+        setDone(true);
+      };
+
+      if (done) return (
+        <div className="max-w-lg mx-auto px-4 sm:px-6 py-20 text-center">
+          <div className="w-20 h-20 mx-auto rounded-full bg-green-100 text-green-600 grid place-items-center mb-6"><Icon name="check" className="w-10 h-10" /></div>
+          <h1 className="text-2xl font-extrabold text-ink-900">수강 신청이 완료되었어요!</h1>
+          <p className="mt-3 text-ink-500 leading-relaxed">이제 바로 학습을 시작할 수 있습니다.<br/>내 강의에서 강좌를 확인해 보세요.</p>
+          <div className="mt-8 flex flex-col sm:flex-row gap-3 justify-center">
+            <Button variant="primary" size="lg" as="a" href="#/my-courses">내 강의로 가기 <Icon name="arrow" className="w-5 h-5" /></Button>
+            <Button variant="secondary" size="lg" as="a" href="#/courses">강좌 더 보기</Button>
+          </div>
+        </div>
+      );
+
+      if (items.length === 0) return (
+        <EmptyState icon="cart" title="결제할 강좌가 없어요" desc="장바구니에 강좌를 먼저 담아주세요." to="/courses" cta="강좌 둘러보기" />
+      );
+
+      const methods = [
+        { id: 'card', label: '신용/체크카드' },
+        { id: 'kakao', label: '카카오페이' },
+        { id: 'naver', label: '네이버페이' }
+      ];
+
+      return (
+        <div className="max-w-5xl mx-auto px-4 sm:px-6 py-14">
+          <h1 className="text-2xl sm:text-3xl font-extrabold text-ink-900 mb-2">결제하기</h1>
+          <p className="text-sm text-ink-400 mb-8">본 결제는 프로토타입이며 실제 결제는 이루어지지 않습니다.</p>
+          <form onSubmit={submit} className="grid lg:grid-cols-3 gap-8">
+            <div className="lg:col-span-2 space-y-6">
+              <Card className="p-6">
+                <h2 className="font-bold text-ink-900 mb-4">주문자 정보</h2>
+                <div className="grid sm:grid-cols-2 gap-4">
+                  <Field label="이름" value={form.name} onChange={v => setForm(f => ({ ...f, name: v }))} placeholder="홍길동" required />
+                  <Field label="이메일" type="email" value={form.email} onChange={v => setForm(f => ({ ...f, email: v }))} placeholder="you@example.com" required />
+                </div>
+              </Card>
+
+              <Card className="p-6">
+                <h2 className="font-bold text-ink-900 mb-4">결제 수단</h2>
+                <div className="grid sm:grid-cols-3 gap-3">
+                  {methods.map(m => (
+                    <label key={m.id} className={`cursor-pointer rounded-xl border-2 p-4 text-center font-semibold text-sm transition-colors ${method === m.id ? 'border-accent-500 bg-accent-50 text-accent-700' : 'border-ink-200 text-ink-600 hover:border-ink-300'}`}>
+                      <input type="radio" name="method" className="sr-only" checked={method === m.id} onChange={() => setMethod(m.id)} />
+                      {m.label}
+                    </label>
+                  ))}
+                </div>
+                {method === 'card' && (
+                  <div className="mt-5 grid sm:grid-cols-2 gap-4">
+                    <div className="sm:col-span-2">
+                      <Field label="카드 번호" value={form.card}
+                        onChange={v => setForm(f => ({ ...f, card: v.replace(/[^0-9]/g, '').replace(/(.{4})/g, '$1 ').trim().slice(0, 19) }))}
+                        placeholder="0000 0000 0000 0000" hint="숫자만 입력하세요 (형식 안내용)" />
+                    </div>
+                  </div>
+                )}
+                {method !== 'card' && (
+                  <p className="mt-4 text-sm text-ink-500 bg-ink-50 rounded-xl p-4">결제하기를 누르면 {methods.find(m => m.id === method).label} 결제 화면으로 이동하는 것으로 가정합니다. (프로토타입)</p>
+                )}
+              </Card>
+            </div>
+
+            <aside>
+              <div className="lg:sticky lg:top-24">
+                <Card className="p-6">
+                  <h2 className="font-bold text-ink-900 mb-4">주문 요약</h2>
+                  <ul className="space-y-3 max-h-56 overflow-auto no-scrollbar">
+                    {items.map(c => (
+                      <li key={c.id} className="flex justify-between gap-3 text-sm">
+                        <span className="text-ink-600 line-clamp-2">{c.title}</span>
+                        <span className="font-semibold text-ink-900 shrink-0">{won(c.salePrice)}</span>
+                      </li>
+                    ))}
+                  </ul>
+                  <div className="mt-4 pt-4 border-t border-ink-100 flex justify-between items-center">
+                    <span className="font-bold text-ink-900">총 결제금액</span>
+                    <span className="text-2xl font-extrabold text-ink-900">{won(total)}</span>
+                  </div>
+                  <Button type="submit" variant="primary" size="lg" className="w-full mt-6">{won(total)} 결제하기</Button>
+                  <p className="mt-3 text-xs text-ink-400 text-center flex items-center justify-center gap-1"><Icon name="shield" className="w-4 h-4" /> 안전한 결제 (모의)</p>
+                </Card>
+              </div>
+            </aside>
+          </form>
+        </div>
+      );
+    };
+
+    const Field = ({ label, type = 'text', value, onChange, placeholder, hint, required }) => (
+      <label className="block">
+        <span className="block text-sm font-semibold text-ink-700 mb-1.5">{label}{required && <span className="text-accent-500"> *</span>}</span>
+        <input type={type} value={value} onChange={e => onChange(e.target.value)} placeholder={placeholder} required={required}
+          className="w-full rounded-xl border border-ink-200 px-4 py-2.5 text-ink-900 placeholder-ink-300 focus:outline-none focus:border-accent-400 focus:ring-2 focus:ring-accent-100 transition" />
+        {hint && <span className="block text-xs text-ink-400 mt-1">{hint}</span>}
+      </label>
+    );
+
+    // ========================================
+    // 📄 MyCoursesPage
+    // ========================================
+    const MyCoursesPage = () => {
+      const { purchased } = useStore();
+      const items = purchased.map(findCourse).filter(Boolean);
+      const fakeProgress = (id) => { let h = 0; for (const ch of id) h = (h * 31 + ch.charCodeAt(0)) % 100; return h; };
+
+      if (items.length === 0) return (
+        <EmptyState icon="book" title="아직 수강 중인 강좌가 없어요" desc="관심 있는 강좌를 신청하고 학습을 시작해 보세요." to="/courses" cta="강좌 목록 보기" />
+      );
+
+      return (
+        <div className="max-w-5xl mx-auto px-4 sm:px-6 py-14">
+          <h1 className="text-2xl sm:text-3xl font-extrabold text-ink-900 mb-2">내 강의</h1>
+          <p className="text-ink-500 mb-8">{items.length}개의 강좌를 수강 중입니다.</p>
+          <div className="grid gap-6 sm:grid-cols-2">
+            {items.map(c => {
+              const p = fakeProgress(c.id);
+              return (
+                <Card key={c.id} className="overflow-hidden flex flex-col">
+                  <Thumb course={c} className="h-32" />
+                  <div className="p-5 flex flex-col flex-1">
+                    <div className="text-xs text-ink-400">{c.badge} · {c.level}</div>
+                    <h3 className="font-bold text-ink-900 text-lg mt-0.5">{c.title}</h3>
+                    <div className="mt-4">
+                      <div className="flex justify-between text-sm mb-1.5">
+                        <span className="text-ink-500">학습 진도</span>
+                        <span className="font-bold text-accent-600">{p}%</span>
+                      </div>
+                      <div className="h-2 rounded-full bg-ink-100 overflow-hidden">
+                        <div className="h-full bg-accent-600 rounded-full transition-all" style={{ width: p + '%' }} />
+                      </div>
+                    </div>
+                    <div className="mt-5 flex gap-2">
+                      <Button variant="dark" className="flex-1" onClick={() => alert('학습 화면은 프로토타입에서 제공되지 않습니다.')}><Icon name="play" className="w-4 h-4" /> 이어서 학습하기</Button>
+                      <Button variant="secondary" as="a" href={`#/courses/${c.id}`}>강의 정보</Button>
+                    </div>
+                  </div>
+                </Card>
+              );
+            })}
+          </div>
+        </div>
+      );
+    };
+
+    // ========================================
+    // 📄 FaqPage
+    // ========================================
+    const FaqPage = () => {
+      const [open, setOpen] = useState(0);
+      return (
+        <div className="max-w-3xl mx-auto px-4 sm:px-6 py-14">
+          <SectionTitle center eyebrow="FAQ" title="자주 묻는 질문"
+            desc="궁금한 점을 먼저 확인해 보세요. 더 궁금한 점은 고객센터로 문의해 주세요." />
+          <div className="mt-10 space-y-3">
+            {FAQS.map((f, i) => (
+              <Card key={i} className="overflow-hidden">
+                <button className="w-full flex items-center justify-between gap-4 p-5 text-left hover:bg-ink-50 transition-colors" onClick={() => setOpen(open === i ? -1 : i)} aria-expanded={open === i}>
+                  <span className="font-bold text-ink-900 flex items-start gap-3">
+                    <span className="text-accent-600 font-extrabold">Q</span> {f.q}
+                  </span>
+                  <Icon name="chevron" className={`w-5 h-5 text-ink-400 shrink-0 transition-transform ${open === i ? 'rotate-180' : ''}`} />
+                </button>
+                {open === i && (
+                  <div className="px-5 pb-5 pt-1 border-t border-ink-100">
+                    <p className="text-ink-600 leading-relaxed pl-6">{f.a}</p>
+                  </div>
+                )}
+              </Card>
+            ))}
+          </div>
+          <Card className="mt-10 p-6 text-center bg-ink-50 border-ink-100">
+            <p className="text-ink-600">더 궁금한 점이 있으신가요?</p>
+            <p className="font-bold text-ink-900 mt-1">평일 10:00–18:00 · help@minssaem.co.kr</p>
+          </Card>
+        </div>
+      );
+    };
+
+    // ========================================
+    // 🧩 EmptyState / NotFound
+    // ========================================
+    const EmptyState = ({ icon, title, desc, to, cta }) => (
+      <div className="max-w-md mx-auto px-4 py-24 text-center">
+        <div className="w-20 h-20 mx-auto rounded-2xl bg-ink-100 text-ink-400 grid place-items-center mb-6"><Icon name={icon} className="w-10 h-10" /></div>
+        <h1 className="text-xl font-extrabold text-ink-900">{title}</h1>
+        <p className="mt-2 text-ink-500">{desc}</p>
+        <div className="mt-8"><Button variant="primary" size="lg" as="a" href={'#' + to}>{cta} <Icon name="arrow" className="w-5 h-5" /></Button></div>
+      </div>
+    );
+
+    const NotFound = () => (
+      <EmptyState icon="globe" title="페이지를 찾을 수 없어요" desc="주소를 다시 확인해 주세요." to="/" cta="홈으로 가기" />
+    );
+
+    // ========================================
+    // 🚀 App
+    // ========================================
+    const Routes = () => {
+      const { path } = useRouter();
+      if (path === '/') return <HomePage />;
+      if (path === '/courses') return <CoursesPage />;
+      const detail = matchRoute('/courses/:id', path);
+      if (detail) return <CourseDetailPage id={detail.id} />;
+      if (path === '/instructor') return <InstructorPage />;
+      if (path === '/reviews') return <ReviewsPage />;
+      if (path === '/cart') return <CartPage />;
+      if (path === '/checkout') return <CheckoutPage />;
+      if (path === '/my-courses') return <MyCoursesPage />;
+      if (path === '/faq') return <FaqPage />;
+      return <NotFound />;
+    };
+
+    const App = () => (
+      <Router>
+        <StoreProvider>
+          <ToastProvider>
+            <div className="min-h-screen flex flex-col">
+              <Header />
+              <main className="flex-1"><Routes /></main>
+              <Footer />
+            </div>
+          </ToastProvider>
+        </StoreProvider>
+      </Router>
+    );
+
+    ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+  </script>
+</body>
+</html>
