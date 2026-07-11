@@ -4,6 +4,10 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>민쌤 비즈니스 영어</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.css">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&display=swap">
   <script src="https://cdn.tailwindcss.com/3.4.16"></script>
   <!-- CDN 버전 고정 필수: @babel/standalone 8.x 는 inline text/babel 을 깨뜨리므로 7.25.9 유지 -->
   <script src="https://unpkg.com/react@18.3.1/umd/react.development.js" crossorigin></script>
@@ -14,23 +18,27 @@
       theme: {
         extend: {
           colors: {
+            // 웜 뉴트럴(종이) → 차콜 스케일. 히어로/푸터/자막 카드는 ink-950(캡션 다크)을 사용.
             ink: {
-              50: '#f3f6fc', 100: '#e5ebf7', 200: '#c6d4ec', 300: '#93aad9',
-              400: '#5f7cbf', 500: '#3d5aa3', 600: '#2c4486', 700: '#22356b',
-              800: '#1a2a56', 900: '#14213f', 950: '#0c1528'
+              50: '#f5f4f1', 100: '#e9e7e1', 200: '#d3d0c6', 300: '#b2ad9e',
+              400: '#8d8874', 500: '#5c5748', 600: '#423e33', 700: '#2e2b23',
+              800: '#1e1c16', 900: '#15130f', 950: '#0b0a07'
             },
+            // 브랜드 기본 액센트(버튼/링크/가격). "교정 전/라이브" 표시는 red-* 유틸을 별도로 사용.
             accent: {
-              50: '#eff5ff', 100: '#dbe8fe', 200: '#bfd6fe', 300: '#93b8fd',
-              400: '#6092fa', 500: '#3b6ef5', 600: '#2456e6', 700: '#1c43c9',
-              800: '#1d3ba3', 900: '#1d3681'
+              50: '#eff6ff', 100: '#dbeafe', 200: '#bfdbfe', 300: '#93c5fd',
+              400: '#60a5fa', 500: '#3b82f6', 600: '#2563eb', 700: '#1d4ed8',
+              800: '#1e40af', 900: '#1e3a8a'
             }
           },
           fontFamily: {
-            sans: ['"Pretendard"', 'system-ui', '-apple-system', '"Apple SD Gothic Neo"', '"Malgun Gothic"', 'sans-serif']
+            sans: ['"Pretendard"', 'system-ui', '-apple-system', '"Apple SD Gothic Neo"', '"Malgun Gothic"', 'sans-serif'],
+            // 영어 예문·타임스탬프·라벨용 캡션 폰트. 한글은 자동으로 sans로 폴백된다.
+            mono: ['"IBM Plex Mono"', '"Pretendard"', 'ui-monospace', 'SFMono-Regular', 'monospace']
           },
           boxShadow: {
-            soft: '0 1px 2px rgba(16,24,40,0.04), 0 4px 16px rgba(16,24,40,0.06)',
-            lift: '0 8px 30px rgba(16,24,40,0.12)'
+            soft: '0 1px 2px rgba(20,18,10,0.04), 0 2px 8px rgba(20,18,10,0.05)',
+            lift: '0 10px 28px rgba(20,18,10,0.10)'
           }
         }
       }
@@ -241,7 +249,7 @@
     // 🎨 Design System
     // ========================================
     const Button = ({ variant = 'primary', size = 'md', className = '', as = 'button', href, children, ...props }) => {
-      const base = 'inline-flex items-center justify-center gap-2 font-semibold rounded-xl transition-all duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-400 focus-visible:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed';
+      const base = 'inline-flex items-center justify-center gap-2 font-semibold rounded-lg transition-all duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-400 focus-visible:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed';
       const variants = {
         primary: 'bg-accent-600 text-white hover:bg-accent-700 shadow-soft hover:shadow-lift',
         dark: 'bg-ink-900 text-white hover:bg-ink-800 shadow-soft',
@@ -256,17 +264,17 @@
     };
 
     const Card = ({ className = '', children, ...props }) => (
-      <div className={`bg-white rounded-2xl border border-ink-100 shadow-soft ${className}`} {...props}>{children}</div>
+      <div className={`bg-white rounded-xl border border-ink-200 shadow-soft ${className}`} {...props}>{children}</div>
     );
 
     const Badge = ({ children, className = '' }) => (
-      <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold tracking-wide ${className}`}>{children}</span>
+      <span className={`inline-flex items-center px-2.5 py-1 rounded-md text-xs font-bold tracking-wide font-mono ${className}`}>{children}</span>
     );
 
     const SectionTitle = ({ eyebrow, title, desc, center }) => (
       <div className={center ? 'text-center max-w-2xl mx-auto' : 'max-w-2xl'}>
-        {eyebrow && <div className="text-accent-600 font-bold text-sm tracking-widest uppercase mb-3">{eyebrow}</div>}
-        <h2 className="text-2xl sm:text-3xl md:text-4xl font-extrabold text-ink-900 leading-tight tracking-tight">{title}</h2>
+        {eyebrow && <div className="text-accent-600 font-bold text-sm tracking-widest uppercase mb-3 font-mono">{eyebrow}</div>}
+        <h2 className="text-2xl sm:text-3xl md:text-4xl font-extrabold text-ink-900 leading-tight tracking-tight break-keep">{title}</h2>
         {desc && <p className="mt-4 text-ink-500 text-base sm:text-lg leading-relaxed">{desc}</p>}
       </div>
     );
@@ -558,7 +566,7 @@
           <div className="max-w-6xl mx-auto px-4 sm:px-6">
             <div className="h-16 flex items-center justify-between gap-4">
               <Link to="/" className="flex items-center gap-2.5 shrink-0">
-                <span className="w-9 h-9 rounded-xl bg-ink-900 text-white grid place-items-center font-extrabold">민</span>
+                <span className="w-9 h-9 rounded-lg bg-ink-900 text-white grid place-items-center font-extrabold font-mono">민</span>
                 <span className="font-extrabold text-ink-900 leading-tight hidden sm:block">
                   민쌤의 <span className="text-accent-600">비즈니스 영어</span>
                 </span>
@@ -624,7 +632,7 @@
           <div className="grid gap-10 md:grid-cols-4">
             <div className="md:col-span-2">
               <div className="flex items-center gap-2.5 mb-4">
-                <span className="w-9 h-9 rounded-xl bg-white text-ink-900 grid place-items-center font-extrabold">민</span>
+                <span className="w-9 h-9 rounded-lg bg-white text-ink-900 grid place-items-center font-extrabold font-mono">민</span>
                 <span className="font-extrabold text-white">민쌤의 비즈니스 영어</span>
               </div>
               <p className="text-sm leading-relaxed max-w-md text-ink-400">
@@ -643,8 +651,8 @@
             </div>
             <div>
               <div className="text-white font-bold text-sm mb-3">고객센터</div>
-              <ul className="space-y-2 text-sm text-ink-400">
-                <li>평일 10:00 - 18:00</li>
+              <ul className="space-y-2 text-sm text-ink-400 font-mono">
+                <li>평일 10:00 – 18:00</li>
                 <li>help@minssaem.co.kr</li>
                 <li>파고다 종로 · 강남점 운영</li>
               </ul>
@@ -704,7 +712,7 @@
           {/* Hero */}
           <section className="relative overflow-hidden bg-ink-950 text-white">
             <div className="absolute inset-0 opacity-30"
-              style={{ backgroundImage: 'radial-gradient(circle at 15% 10%, #2456e6 0, transparent 40%), radial-gradient(circle at 85% 80%, #1d3681 0, transparent 45%)' }} />
+              style={{ backgroundImage: 'radial-gradient(circle at 15% 10%, #2563EB 0, transparent 40%), radial-gradient(circle at 85% 80%, #1E3A8A 0, transparent 45%)' }} />
             <div className="relative max-w-6xl mx-auto px-4 sm:px-6 py-20 sm:py-28 grid lg:grid-cols-2 gap-12 items-center">
               <div className="fade-up">
                 <Badge className="bg-white/10 text-accent-200 border border-white/10 mb-6">파고다 강남·종로 비즈니스 회화 대표 강사</Badge>
@@ -721,11 +729,11 @@
                   <Button as="a" href="#/instructor" size="lg" variant="secondary" className="w-full sm:w-auto bg-white/10 text-white border-white/20 hover:bg-white/20">강사 소개 보기</Button>
                 </div>
                 <div className="mt-10 flex items-center gap-6 text-sm text-ink-300">
-                  <div><span className="text-2xl font-extrabold text-white">2가지</span> 트랙 운영</div>
+                  <div><span className="text-2xl font-extrabold text-white font-mono">2가지</span> 트랙 운영</div>
                   <div className="w-px h-8 bg-white/15" />
-                  <div><span className="text-2xl font-extrabold text-white">4.9</span> / 5.0 평점</div>
+                  <div><span className="text-2xl font-extrabold text-white font-mono">4.9</span> / 5.0 평점</div>
                   <div className="w-px h-8 bg-white/15" />
-                  <div><span className="text-2xl font-extrabold text-white">LinkedIn 5만+</span></div>
+                  <div><span className="text-2xl font-extrabold text-white font-mono">LinkedIn 5만+</span></div>
                 </div>
               </div>
 
@@ -787,17 +795,26 @@
               desc="직역한 영어를 원어민이 실제로 쓰는 자연스러운 표현으로 바꿔 드립니다." />
             <div className="mt-12 grid gap-4 sm:grid-cols-2">
               {TRANSFORMS.map((t, i) => (
-                <Card key={i} className="p-6">
-                  <div className="text-ink-400">
-                    <div className="font-semibold text-ink-500 line-through decoration-ink-300">{t.before}</div>
-                    <div className="text-xs text-ink-400 mt-0.5">{t.beforeKo}</div>
+                <div key={i} className="rounded-xl bg-ink-950 border border-ink-800 p-6 font-mono">
+                  <div className="flex items-center gap-1.5 text-[10px] tracking-widest uppercase text-ink-500 mb-4">
+                    교정 전 → 후
                   </div>
-                  <div className="my-3 flex justify-center"><Icon name="chevron" className="w-5 h-5 text-accent-500" /></div>
-                  <div>
-                    <div className="font-extrabold text-ink-900">{t.after}</div>
-                    <div className="text-sm text-accent-600 mt-1">{t.afterKo}</div>
+                  <div className="flex items-start gap-2.5">
+                    <span className="text-ink-500 mt-0.5 shrink-0">✕</span>
+                    <div>
+                      <div className="text-ink-400 line-through decoration-ink-600 decoration-2">{t.before}</div>
+                      <div className="text-xs text-ink-500 mt-1 font-sans">{t.beforeKo}</div>
+                    </div>
                   </div>
-                </Card>
+                  <div className="my-3 pl-6 text-ink-700">↓</div>
+                  <div className="flex items-start gap-2.5">
+                    <span className="text-green-400 mt-0.5 shrink-0">✓</span>
+                    <div>
+                      <div className="font-semibold text-white">{t.after}</div>
+                      <div className="text-xs text-ink-400 mt-1 font-sans">{t.afterKo}</div>
+                    </div>
+                  </div>
+                </div>
               ))}
             </div>
           </section>
@@ -811,7 +828,7 @@
                 {[track1, track2].map((c, idx) => (
                   <Card key={c.id} className="p-7 flex flex-col">
                     <div className="flex items-center gap-3">
-                      <span className={`px-3 py-1 rounded-lg text-white text-sm font-extrabold ${idx === 0 ? 'bg-ink-700' : 'bg-accent-600'}`}>TRACK 0{idx + 1}</span>
+                      <span className={`px-3 py-1 rounded-lg text-white text-sm font-extrabold font-mono tracking-wider ${idx === 0 ? 'bg-ink-700' : 'bg-accent-600'}`}>TRACK 0{idx + 1}</span>
                       <span className="text-xs font-bold text-ink-400">{c.tag}</span>
                     </div>
                     <h3 className="mt-4 text-xl font-extrabold text-ink-900">{c.title}</h3>
@@ -929,7 +946,7 @@
           {/* 최종 CTA */}
           <section className="max-w-6xl mx-auto px-4 sm:px-6 pb-20">
             <div className="relative overflow-hidden rounded-3xl bg-ink-950 text-white px-6 sm:px-12 py-16 text-center">
-              <div className="absolute inset-0 opacity-40" style={{ backgroundImage: 'radial-gradient(circle at 80% 20%, #2456e6 0, transparent 45%)' }} />
+              <div className="absolute inset-0 opacity-40" style={{ backgroundImage: 'radial-gradient(circle at 80% 20%, #2563EB 0, transparent 45%)' }} />
               <div className="relative">
                 <h2 className="text-2xl sm:text-4xl font-extrabold leading-tight">나에게 맞는 트랙을 선택하세요!</h2>
                 <p className="mt-4 text-ink-200 text-lg max-w-xl mx-auto">오늘 배운 문장, 내일 회의에서. 실무 영어 자신감을 만드세요.</p>
@@ -1096,7 +1113,7 @@
                 <Card className="p-6">
                   <div className="flex items-baseline gap-2">
                     <span className="text-sm text-ink-400 line-through">{won(course.price)}</span>
-                    <Badge className="bg-red-50 text-red-600">{Math.round((1 - course.salePrice / course.price) * 100)}% 할인</Badge>
+                    <Badge className="bg-accent-50 text-accent-700">{Math.round((1 - course.salePrice / course.price) * 100)}% 할인</Badge>
                   </div>
                   <div className="text-3xl font-extrabold text-ink-900 mt-1">{won(course.salePrice)}</div>
                   <div className="text-xs text-ink-400 mt-0.5">{course.priceNote}</div>
@@ -1545,7 +1562,7 @@
           </div>
           <Card className="mt-10 p-6 text-center bg-ink-50 border-ink-100">
             <p className="text-ink-600">더 궁금한 점이 있으신가요?</p>
-            <p className="font-bold text-ink-900 mt-1">평일 10:00–18:00 · help@minssaem.co.kr</p>
+            <p className="font-bold text-ink-900 mt-1 font-mono">평일 10:00–18:00 · help@minssaem.co.kr</p>
           </Card>
         </div>
       );
