@@ -1,0 +1,19 @@
+{
+  "name": "auth-community-board",
+  "version": "1.0.0",
+  "description": "오늘 뭐 먹었어요 — 로그인한 사용자끼리 맛집/레시피를 공유하는 커뮤니티 게시판",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "bcryptjs": "^3.0.3",
+    "cors": "^2.8.5",
+    "dotenv": "^16.0.0",
+    "express": "^4.18.0",
+    "imagekit": "^6.0.0",
+    "jsonwebtoken": "^9.0.3",
+    "multer": "^2.2.0",
+    "pg": "^8.22.0"
+  }
+}

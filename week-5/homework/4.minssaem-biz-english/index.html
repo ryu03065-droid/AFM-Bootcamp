@@ -13,6 +13,8 @@
   <script src="https://unpkg.com/react@18.3.1/umd/react.development.js" crossorigin></script>
   <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" crossorigin></script>
   <script src="https://unpkg.com/@babel/standalone@7.25.9/babel.min.js"></script>
+  <!-- 토스페이먼츠 결제위젯 SDK v2 (전역 TossPayments 제공) -->
+  <script src="https://js.tosspayments.com/v2/standard"></script>
   <script>
     tailwind.config = {
       theme: {
@@ -61,6 +63,10 @@
     // ========================================
     const { useState, useEffect, useContext, createContext, useMemo, useCallback, useRef } = React;
 
+    // 토스페이먼츠 클라이언트 키 (공개용). 시크릿 키는 서버(.env)에만 존재한다.
+    // 본인 상점 키로 교체하려면 이 값만 바꾸면 된다.
+    const TOSS_CLIENT_KEY = 'test_gck_docs_Ovk5rk1EwkEbP0W43n07xlzm';
+
     // ========================================
     // 📦 DATA (상세페이지 실제 내용 기반)
     // ========================================
@@ -74,7 +80,7 @@
         tag: '비즈니스 영어 기초부터',
         hashtags: ['#비즈니스 영어 기본기 쌓기', '#문법·표현·단어 위주 학습', '#렉쳐형 수업'],
         desc: '문법·표현·단어를 위주로, 실전 비즈니스 상황에서 바로 쓰는 표현을 기초부터 탄탄하게 쌓는 렉쳐형 수업입니다.',
-        price: 320000, salePrice: 249000, priceNote: '4주 과정 기준',
+        price: 320000, salePrice: 100, priceNote: '4주 과정 기준 [TEST-100]',
         rating: 4.9, reviews: 214, students: 1120,
         hours: '주 2회 · 4주', lessons: 8,
         hue: 'from-ink-700 to-ink-900',
@@ -285,6 +291,21 @@
     const RouterContext = createContext();
     const getHash = () => window.location.hash.replace(/^#/, '') || '/';
 
+    // ⚠️ 해시 라우팅 결제 리다이렉트 대응 헬퍼
+    // 토스는 successUrl(#/payment/success)로 리다이렉트할 때 paymentKey/orderId/amount 를
+    // 해시(#) '앞'의 location.search 에 붙이고, paymentType 등은 해시 안 쿼리에 붙인다.
+    // 따라서 두 곳을 모두 파싱해 병합해야 결제 파라미터가 undefined 로 유실되지 않는다.
+    const parseHashQuery = () => {
+      const params = new URLSearchParams();
+      // 1) location.search — 토스가 paymentKey/orderId/amount 를 여기 붙인다
+      new URLSearchParams(window.location.search).forEach((v, k) => params.set(k, v));
+      // 2) 해시 안의 쿼리 문자열 — SDK 가 paymentType 등을 여기 붙인다
+      const hash = window.location.hash;
+      const qi = hash.indexOf('?');
+      if (qi !== -1) new URLSearchParams(hash.slice(qi + 1)).forEach((v, k) => params.set(k, v));
+      return params;
+    };
+
     const Router = ({ children }) => {
       const [path, setPath] = useState(getHash());
       useEffect(() => {
@@ -489,15 +510,21 @@
         setCart(updated);
       }, [authFetch]);
 
-      const purchase = useCallback(async () => {
-        if (!isAuthed) { openAuth(); throw new Error('AUTH_REQUIRED'); }
-        const data = await authFetch('/checkout', { method: 'POST' });
-        setPurchased(data.myCourses);
-        setCart([]);
-        return data;
-      }, [isAuthed, authFetch, openAuth]);
+      // 결제 승인 성공 후 서버 상태(장바구니/수강목록)를 다시 불러온다.
+      const refresh = useCallback(async () => {
+        if (!isAuthed) return;
+        const [cartIds, myCourseIds] = await Promise.all([authFetch('/cart'), authFetch('/my-courses')]);
+        setCart(cartIds);
+        setPurchased(myCourseIds);
+      }, [isAuthed, authFetch]);
 
-      const value = { cart, purchased, addToCart, removeFromCart, clearCart, purchase,
+      // 승인 응답으로 받은 수강목록을 즉시 반영 (재조회 없이 UI 갱신)
+      const applyPurchased = useCallback((myCourseIds) => {
+        if (Array.isArray(myCourseIds)) setPurchased(myCourseIds);
+        setCart([]);
+      }, []);
+
+      const value = { cart, purchased, addToCart, removeFromCart, clearCart, refresh, applyPurchased,
         inCart: (id) => cart.includes(id), isPurchased: (id) => purchased.includes(id) };
       return <StoreContext.Provider value={value}>{children}</StoreContext.Provider>;
     };
@@ -1357,62 +1384,92 @@
     // 📄 CheckoutPage
     // ========================================
     const CheckoutPage = () => {
-      const { cart, purchase } = useStore();
-      const { isAuthed, openAuth } = useAuth();
-      const { navigate } = useRouter();
+      const { cart } = useStore();
+      const { isAuthed, openAuth, authFetch, user } = useAuth();
       const toast = useToast();
       const items = cart.map(findCourse).filter(Boolean);
       const total = items.reduce((s, c) => s + c.salePrice, 0);
-      const [method, setMethod] = useState('card');
-      const [done, setDone] = useState(false);
       const [busy, setBusy] = useState(false);
-      const [form, setForm] = useState({ name: '', email: '', card: '' });
+      const [ready, setReady] = useState(false);
+      const [form, setForm] = useState({ name: '', email: '' });
 
-      const submit = async (e) => {
-        e.preventDefault();
+      const widgetsRef = useRef(null);
+      const isRenderedRef = useRef(false);
+      // 결제창은 유저별로 분리 (토스 customerKey 규칙: 영문/숫자/-/_/./=/@)
+      const customerKey = useMemo(
+        () => (user && user.id != null ? 'minssaem-user-' + user.id : (window.TossPayments ? TossPayments.ANONYMOUS : 'ANONYMOUS')),
+        [user]
+      );
+
+      // 위젯 초기화 & 렌더링 (페이지당 1회만 렌더, 금액 변경은 setAmount 로만)
+      useEffect(() => {
+        if (!isAuthed || items.length === 0) return;
+        let cancelled = false;
+        (async () => {
+          try {
+            if (typeof TossPayments === 'undefined') { toast('결제 모듈을 불러오지 못했어요. 새로고침 후 다시 시도해 주세요.'); return; }
+            if (!widgetsRef.current) {
+              const tp = TossPayments(TOSS_CLIENT_KEY);
+              widgetsRef.current = tp.widgets({ customerKey });
+            }
+            await widgetsRef.current.setAmount({ currency: 'KRW', value: total });
+            if (!isRenderedRef.current) {
+              await Promise.all([
+                widgetsRef.current.renderPaymentMethods({ selector: '#payment-method', variantKey: 'DEFAULT' }),
+                widgetsRef.current.renderAgreement({ selector: '#agreement', variantKey: 'AGREEMENT' }),
+              ]);
+              isRenderedRef.current = true;
+            }
+            if (!cancelled) setReady(true);
+          } catch (e) {
+            if (!cancelled) toast('결제 위젯을 불러오지 못했어요: ' + (e.message || ''));
+          }
+        })();
+        return () => { cancelled = true; };
+      }, [isAuthed, items.length, total, customerKey]);
+
+      const handlePay = async () => {
         if (busy) return;
+        if (!form.name.trim() || !form.email.trim()) { toast('주문자 이름과 이메일을 입력해 주세요.'); return; }
+        if (!widgetsRef.current || !ready) { toast('결제 위젯을 불러오는 중이에요. 잠시 후 다시 시도해 주세요.'); return; }
         setBusy(true);
         try {
-          await purchase();
-          setDone(true);
+          // 1) 서버에 주문 사전 생성 — 금액은 서버가 장바구니 기준으로 재계산한다.
+          const order = await authFetch('/payments/prepare', { method: 'POST' });
+          // 2) 결제 금액을 서버가 확정한 금액으로 맞춰 승인 시 금액 불일치를 방지한다.
+          await widgetsRef.current.setAmount({ currency: 'KRW', value: order.amount });
+          // 3) 결제창 호출 — 성공/실패 시 해시 라우트로 리다이렉트된다.
+          const base = window.location.origin + window.location.pathname;
+          await widgetsRef.current.requestPayment({
+            orderId: order.orderId,
+            orderName: order.orderName,
+            successUrl: base + '#/payment/success',
+            failUrl: base + '#/payment/fail',
+            customerEmail: form.email.trim(),
+            customerName: form.name.trim(),
+          });
         } catch (err) {
-          if (err.message !== 'AUTH_REQUIRED') toast(err.message || '결제에 실패했어요.');
-        } finally {
+          // 사용자가 결제창을 닫은 경우는 조용히 무시
+          if (!err || err.code !== 'USER_CANCEL') {
+            toast((err && err.message) || '결제를 시작하지 못했어요.');
+          }
           setBusy(false);
         }
       };
 
-      if (done) return (
-        <div className="max-w-lg mx-auto px-4 sm:px-6 py-20 text-center">
-          <div className="w-20 h-20 mx-auto rounded-full bg-green-100 text-green-600 grid place-items-center mb-6"><Icon name="check" className="w-10 h-10" /></div>
-          <h1 className="text-2xl font-extrabold text-ink-900">수강 신청이 완료되었어요!</h1>
-          <p className="mt-3 text-ink-500 leading-relaxed">이제 바로 학습을 시작할 수 있습니다.<br/>내 강의에서 강좌를 확인해 보세요.</p>
-          <div className="mt-8 flex flex-col sm:flex-row gap-3 justify-center">
-            <Button variant="primary" size="lg" as="a" href="#/my-courses">내 강의로 가기 <Icon name="arrow" className="w-5 h-5" /></Button>
-            <Button variant="secondary" size="lg" as="a" href="#/courses">강좌 더 보기</Button>
-          </div>
-        </div>
-      );
-
       if (!isAuthed) return (
-        <EmptyState icon="user" title="로그인이 필요해요" desc="로그인하면 결제(모의)를 진행할 수 있어요." cta="로그인 / 회원가입" onCta={openAuth} />
+        <EmptyState icon="user" title="로그인이 필요해요" desc="로그인하면 결제를 진행할 수 있어요." cta="로그인 / 회원가입" onCta={openAuth} />
       );
 
       if (items.length === 0) return (
         <EmptyState icon="cart" title="결제할 강좌가 없어요" desc="장바구니에 강좌를 먼저 담아주세요." to="/courses" cta="강좌 둘러보기" />
       );
 
-      const methods = [
-        { id: 'card', label: '신용/체크카드' },
-        { id: 'kakao', label: '카카오페이' },
-        { id: 'naver', label: '네이버페이' }
-      ];
-
       return (
         <div className="max-w-5xl mx-auto px-4 sm:px-6 py-14">
           <h1 className="text-2xl sm:text-3xl font-extrabold text-ink-900 mb-2">결제하기</h1>
-          <p className="text-sm text-ink-400 mb-8">본 결제는 프로토타입이며 실제 결제는 이루어지지 않습니다.</p>
-          <form onSubmit={submit} className="grid lg:grid-cols-3 gap-8">
+          <p className="text-sm text-ink-400 mb-8">토스페이먼츠 테스트 결제창으로 진행됩니다. 실제 금액은 청구되지 않아요.</p>
+          <div className="grid lg:grid-cols-3 gap-8">
             <div className="lg:col-span-2 space-y-6">
               <Card className="p-6">
                 <h2 className="font-bold text-ink-900 mb-4">주문자 정보</h2>
@@ -1424,26 +1481,11 @@
 
               <Card className="p-6">
                 <h2 className="font-bold text-ink-900 mb-4">결제 수단</h2>
-                <div className="grid sm:grid-cols-3 gap-3">
-                  {methods.map(m => (
-                    <label key={m.id} className={`cursor-pointer rounded-xl border-2 p-4 text-center font-semibold text-sm transition-colors ${method === m.id ? 'border-accent-500 bg-accent-50 text-accent-700' : 'border-ink-200 text-ink-600 hover:border-ink-300'}`}>
-                      <input type="radio" name="method" className="sr-only" checked={method === m.id} onChange={() => setMethod(m.id)} />
-                      {m.label}
-                    </label>
-                  ))}
-                </div>
-                {method === 'card' && (
-                  <div className="mt-5 grid sm:grid-cols-2 gap-4">
-                    <div className="sm:col-span-2">
-                      <Field label="카드 번호" value={form.card}
-                        onChange={v => setForm(f => ({ ...f, card: v.replace(/[^0-9]/g, '').replace(/(.{4})/g, '$1 ').trim().slice(0, 19) }))}
-                        placeholder="0000 0000 0000 0000" hint="숫자만 입력하세요 (형식 안내용)" />
-                    </div>
-                  </div>
-                )}
-                {method !== 'card' && (
-                  <p className="mt-4 text-sm text-ink-500 bg-ink-50 rounded-xl p-4">결제하기를 누르면 {methods.find(m => m.id === method).label} 결제 화면으로 이동하는 것으로 가정합니다. (프로토타입)</p>
-                )}
+                {/* 토스페이먼츠 결제위젯이 이 자리에 결제수단 선택 UI 를 렌더링한다 */}
+                <div id="payment-method" />
+                {/* 약관 동의 위젯 */}
+                <div id="agreement" className="mt-4" />
+                {!ready && <p className="mt-4 text-sm text-ink-400">결제 수단을 불러오는 중이에요…</p>}
               </Card>
             </div>
 
@@ -1463,12 +1505,127 @@
                     <span className="font-bold text-ink-900">총 결제금액</span>
                     <span className="text-2xl font-extrabold text-ink-900">{won(total)}</span>
                   </div>
-                  <Button type="submit" variant="primary" size="lg" className="w-full mt-6" disabled={busy}>{busy ? '처리 중…' : `${won(total)} 결제하기`}</Button>
-                  <p className="mt-3 text-xs text-ink-400 text-center flex items-center justify-center gap-1"><Icon name="shield" className="w-4 h-4" /> 안전한 결제 (모의)</p>
+                  <Button type="button" variant="primary" size="lg" className="w-full mt-6" disabled={busy || !ready} onClick={handlePay}>{busy ? '결제창 여는 중…' : `${won(total)} 결제하기`}</Button>
+                  <p className="mt-3 text-xs text-ink-400 text-center flex items-center justify-center gap-1"><Icon name="shield" className="w-4 h-4" /> 토스페이먼츠 안전 결제</p>
                 </Card>
               </div>
             </aside>
-          </form>
+          </div>
+        </div>
+      );
+    };
+
+    // ========================================
+    // 📄 PaymentSuccessPage — 결제 성공 리다이렉트 처리
+    // ========================================
+    const PaymentSuccessPage = () => {
+      const { isAuthed } = useAuth();
+      const { authFetch } = useAuth();
+      const { applyPurchased, refresh } = useStore();
+      const [state, setState] = useState('confirming'); // confirming | done | error
+      const [message, setMessage] = useState('');
+      const [summary, setSummary] = useState(null);
+      const ranRef = useRef(false);
+
+      useEffect(() => {
+        if (ranRef.current) return; // 새로고침/재렌더로 인한 중복 승인 방지
+        ranRef.current = true;
+        (async () => {
+          // ⚠️ 해시 라우팅: paymentKey/orderId/amount 는 location.search 에 있으므로 병합 파서로 읽는다.
+          const q = parseHashQuery();
+          const paymentKey = q.get('paymentKey');
+          const orderId = q.get('orderId');
+          const amount = q.get('amount');
+
+          if (!paymentKey || !orderId || !amount) {
+            setState('error');
+            setMessage('결제 정보를 확인할 수 없어요. 결제가 정상적으로 완료되지 않았을 수 있습니다.');
+            return;
+          }
+          try {
+            const data = await authFetch('/payments/confirm', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ paymentKey, orderId, amount }),
+            });
+            // 승인 성공 → 상태 반영 & URL 정리 (새로고침 시 재승인 방지, 민감 파라미터 노출 최소화)
+            if (data.myCourses) applyPurchased(data.myCourses);
+            else await refresh();
+            setSummary({ orderName: data.orderName, amount: data.amount });
+            setState('done');
+            const cleanUrl = window.location.pathname + '#/payment/success';
+            window.history.replaceState({}, '', cleanUrl);
+          } catch (err) {
+            setState('error');
+            setMessage((err && err.message) || '결제 승인에 실패했어요.');
+          }
+        })();
+      }, [authFetch, applyPurchased, refresh]);
+
+      if (!isAuthed) return (
+        <EmptyState icon="user" title="로그인이 필요해요" desc="결제 내역을 확인하려면 로그인해 주세요." to="/" cta="홈으로 가기" />
+      );
+
+      if (state === 'confirming') return (
+        <div className="max-w-lg mx-auto px-4 sm:px-6 py-24 text-center">
+          <div className="w-16 h-16 mx-auto rounded-full border-4 border-ink-100 border-t-accent-500 animate-spin mb-6" />
+          <h1 className="text-xl font-extrabold text-ink-900">결제를 승인하는 중이에요…</h1>
+          <p className="mt-3 text-ink-500">잠시만 기다려 주세요. 창을 닫지 말아 주세요.</p>
+        </div>
+      );
+
+      if (state === 'error') return (
+        <div className="max-w-lg mx-auto px-4 sm:px-6 py-20 text-center">
+          <div className="w-20 h-20 mx-auto rounded-full bg-red-100 text-red-600 grid place-items-center mb-6"><Icon name="close" className="w-10 h-10" /></div>
+          <h1 className="text-2xl font-extrabold text-ink-900">결제 승인에 실패했어요</h1>
+          <p className="mt-3 text-ink-500 leading-relaxed">{message}</p>
+          <div className="mt-8 flex flex-col sm:flex-row gap-3 justify-center">
+            <Button variant="primary" size="lg" as="a" href="#/cart">장바구니로 돌아가기 <Icon name="arrow" className="w-5 h-5" /></Button>
+            <Button variant="secondary" size="lg" as="a" href="#/courses">강좌 더 보기</Button>
+          </div>
+        </div>
+      );
+
+      return (
+        <div className="max-w-lg mx-auto px-4 sm:px-6 py-20 text-center">
+          <div className="w-20 h-20 mx-auto rounded-full bg-green-100 text-green-600 grid place-items-center mb-6"><Icon name="check" className="w-10 h-10" /></div>
+          <h1 className="text-2xl font-extrabold text-ink-900">결제가 완료되었어요!</h1>
+          {summary && (
+            <p className="mt-3 text-ink-500 leading-relaxed">
+              <span className="font-semibold text-ink-700">{summary.orderName}</span><br/>
+              결제금액 <span className="font-semibold text-ink-700">{won(summary.amount)}</span>
+            </p>
+          )}
+          <p className="mt-3 text-ink-500 leading-relaxed">이제 바로 학습을 시작할 수 있습니다.<br/>내 강의에서 강좌를 확인해 보세요.</p>
+          <div className="mt-8 flex flex-col sm:flex-row gap-3 justify-center">
+            <Button variant="primary" size="lg" as="a" href="#/my-courses">내 강의로 가기 <Icon name="arrow" className="w-5 h-5" /></Button>
+            <Button variant="secondary" size="lg" as="a" href="#/courses">강좌 더 보기</Button>
+          </div>
+        </div>
+      );
+    };
+
+    // ========================================
+    // 📄 PaymentFailPage — 결제 실패/취소 리다이렉트 처리
+    // ========================================
+    const PaymentFailPage = () => {
+      const [info, setInfo] = useState({ code: '', message: '' });
+      useEffect(() => {
+        // ⚠️ 실패 리다이렉트도 code/message 가 location.search 에 붙으므로 동일 파서 사용
+        const q = parseHashQuery();
+        setInfo({ code: q.get('code') || '', message: q.get('message') || '결제가 취소되었거나 완료되지 않았어요.' });
+      }, []);
+
+      return (
+        <div className="max-w-lg mx-auto px-4 sm:px-6 py-20 text-center">
+          <div className="w-20 h-20 mx-auto rounded-full bg-red-100 text-red-600 grid place-items-center mb-6"><Icon name="close" className="w-10 h-10" /></div>
+          <h1 className="text-2xl font-extrabold text-ink-900">결제가 완료되지 않았어요</h1>
+          <p className="mt-3 text-ink-500 leading-relaxed">{info.message}</p>
+          {info.code && <p className="mt-2 text-xs text-ink-400 font-mono">오류 코드: {info.code}</p>}
+          <div className="mt-8 flex flex-col sm:flex-row gap-3 justify-center">
+            <Button variant="primary" size="lg" as="a" href="#/cart">장바구니로 돌아가기 <Icon name="arrow" className="w-5 h-5" /></Button>
+            <Button variant="secondary" size="lg" as="a" href="#/courses">강좌 더 보기</Button>
+          </div>
         </div>
       );
     };
@@ -1595,16 +1752,20 @@
     // ========================================
     const Routes = () => {
       const { path } = useRouter();
-      if (path === '/') return <HomePage />;
-      if (path === '/courses') return <CoursesPage />;
-      const detail = matchRoute('/courses/:id', path);
+      // 결제 리다이렉트 시 해시에 ?paymentType=... 같은 쿼리가 붙으므로 매칭 전에 제거한다.
+      const cleanPath = path.split('?')[0];
+      if (cleanPath === '/') return <HomePage />;
+      if (cleanPath === '/courses') return <CoursesPage />;
+      const detail = matchRoute('/courses/:id', cleanPath);
       if (detail) return <CourseDetailPage id={detail.id} />;
-      if (path === '/instructor') return <InstructorPage />;
-      if (path === '/reviews') return <ReviewsPage />;
-      if (path === '/cart') return <CartPage />;
-      if (path === '/checkout') return <CheckoutPage />;
-      if (path === '/my-courses') return <MyCoursesPage />;
-      if (path === '/faq') return <FaqPage />;
+      if (cleanPath === '/instructor') return <InstructorPage />;
+      if (cleanPath === '/reviews') return <ReviewsPage />;
+      if (cleanPath === '/cart') return <CartPage />;
+      if (cleanPath === '/checkout') return <CheckoutPage />;
+      if (cleanPath === '/payment/success') return <PaymentSuccessPage />;
+      if (cleanPath === '/payment/fail') return <PaymentFailPage />;
+      if (cleanPath === '/my-courses') return <MyCoursesPage />;
+      if (cleanPath === '/faq') return <FaqPage />;
       return <NotFound />;
     };
 
