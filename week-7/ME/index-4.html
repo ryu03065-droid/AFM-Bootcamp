@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CLAUDE // AI BY ANTHROPIC</title>
+  <script src="https://cdn.tailwindcss.com/3.4.16"></script>
+  <!-- ⚠️ 모든 CDN 버전 고정. Babel 은 7.x. -->
+  <script src="https://unpkg.com/react@18.3.1/umd/react.development.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone@7.25.9/babel.min.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=Space+Mono:wght@400;700&family=Space+Grotesk:wght@400;500;700&display=swap" rel="stylesheet">
+  <style>
+    :root { --ink:#0a0a0a; --cream:#f4f0e6; --orange:#ff5c00; --yellow:#ffd400; --blue:#2b4cff; --pink:#ff5da2; }
+    * { -webkit-font-smoothing:antialiased; }
+    body { background:var(--cream); color:var(--ink); font-family:'Space Grotesk',sans-serif; }
+    .font-black { font-family:'Archivo Black',sans-serif; }
+    .font-mono { font-family:'Space Mono',monospace; }
+    .brut-shadow { box-shadow:8px 8px 0 var(--ink); }
+    .brut-shadow-sm { box-shadow:4px 4px 0 var(--ink); }
+    .brut-shadow-lg { box-shadow:12px 12px 0 var(--ink); }
+    .brut-border { border:4px solid var(--ink); }
+    .brut-border-3 { border:3px solid var(--ink); }
+    .hover-lift { transition:transform .08s ease, box-shadow .08s ease; }
+    .hover-lift:hover { transform:translate(-3px,-3px); box-shadow:11px 11px 0 var(--ink); }
+    .hover-press:hover { transform:translate(4px,4px); box-shadow:0px 0px 0 var(--ink); }
+    @keyframes marquee { from{transform:translateX(0);} to{transform:translateX(-50%);} }
+    .marquee-track { display:inline-flex; white-space:nowrap; animation:marquee 18s linear infinite; }
+    @keyframes blink { 50%{opacity:0;} }
+    .blink { animation:blink 1s step-end infinite; }
+    ::selection { background:var(--orange); color:var(--cream); }
+    html { scroll-behavior:smooth; }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="text/babel">
+    // ========================================
+    // React Hooks
+    // ========================================
+    const { useState, useEffect } = React;
+
+    // ========================================
+    // 🎨 Design System Components
+    // ========================================
+    function Tag({ children, color = "var(--yellow)", className = "" }) {
+      return (
+        <span
+          className={`font-mono text-xs sm:text-sm font-bold uppercase tracking-wider px-3 py-1 brut-border-3 inline-block ${className}`}
+          style={{ background: color }}
+        >
+          {children}
+        </span>
+      );
+    }
+
+    function Button({ children, color = "var(--orange)", href = "#", className = "" }) {
+      return (
+        <a
+          href={href}
+          className={`font-black uppercase text-base sm:text-lg px-6 py-3 brut-border brut-shadow hover-press inline-block cursor-pointer select-none ${className}`}
+          style={{ background: color }}
+        >
+          {children}
+        </a>
+      );
+    }
+
+    function Card({ children, color = "var(--cream)", className = "" }) {
+      return (
+        <div className={`brut-border brut-shadow hover-lift p-6 ${className}`} style={{ background: color }}>
+          {children}
+        </div>
+      );
+    }
+
+    // ========================================
+    // 🧩 Common: Marquee strip
+    // ========================================
+    function Marquee({ text, bg = "var(--ink)", fg = "var(--cream)" }) {
+      const items = Array(8).fill(text);
+      return (
+        <div className="overflow-hidden brut-border border-x-0 py-3" style={{ background: bg, color: fg }}>
+          <div className="marquee-track">
+            {items.concat(items).map((t, i) => (
+              <span key={i} className="font-black uppercase text-xl sm:text-2xl px-6 tracking-tight">
+                {t} <span style={{ color: "var(--orange)" }}>✦</span>
+              </span>
+            ))}
+          </div>
+        </div>
+      );
+    }
+
+    // ========================================
+    // 🧩 Nav
+    // ========================================
+    function Nav() {
+      return (
+        <nav className="sticky top-0 z-50 brut-border border-x-0 border-t-0 flex items-center justify-between px-4 sm:px-6 py-3" style={{ background: "var(--cream)" }}>
+          <a href="#top" className="font-black text-xl sm:text-2xl uppercase tracking-tighter">CLAUDE<span style={{ color: "var(--orange)" }}>.</span></a>
+          <div className="hidden md:flex gap-2">
+            {["WHAT", "TRAITS", "SKILLS", "TALK"].map((l, i) => (
+              <a key={l} href={["#what", "#traits", "#skills", "#talk"][i]}
+                 className="font-mono font-bold text-sm uppercase px-3 py-2 brut-border-3 hover:bg-black hover:text-white transition-colors" style={{ background: "var(--cream)" }}>
+                {l}
+              </a>
+            ))}
+          </div>
+          <span className="md:hidden font-mono text-xs font-bold px-2 py-1 brut-border-3" style={{ background: "var(--yellow)" }}>v.NOW</span>
+        </nav>
+      );
+    }
+
+    // ========================================
+    // 📄 Hero
+    // ========================================
+    function Hero() {
+      return (
+        <header id="top" className="px-4 sm:px-6 pt-10 pb-6 max-w-6xl mx-auto">
+          <div className="flex flex-wrap gap-2 mb-6">
+            <Tag color="var(--orange)">AI ASSISTANT</Tag>
+            <Tag color="var(--blue)" className="text-white">BUILT BY ANTHROPIC</Tag>
+            <Tag color="var(--yellow)">HELPFUL · HONEST · HARMLESS</Tag>
+          </div>
+          <h1 className="font-black uppercase leading-[0.85] tracking-tighter" style={{ fontSize: "clamp(3.5rem, 15vw, 11rem)" }}>
+            I&nbsp;AM<br/>
+            <span style={{ color: "var(--orange)" }}>CLAUDE.</span>
+          </h1>
+          <div className="mt-8 grid md:grid-cols-3 gap-4 items-start">
+            <div className="md:col-span-2 brut-border brut-shadow p-5 sm:p-6" style={{ background: "var(--cream)" }}>
+              <p className="font-mono text-base sm:text-xl leading-relaxed">
+                An AI assistant. I write, I code, I read, I reason. I think out loud and I try to get it right.
+                <span className="blink" style={{ color: "var(--orange)" }}>_</span>
+              </p>
+            </div>
+            <div className="brut-border brut-shadow p-5 flex flex-col gap-3" style={{ background: "var(--yellow)" }}>
+              <span className="font-mono text-xs font-bold uppercase">Status</span>
+              <span className="font-black text-3xl uppercase leading-none">ONLINE</span>
+              <span className="font-mono text-xs">Ready when you are.</span>
+            </div>
+          </div>
+          <div className="mt-6 flex flex-wrap gap-3">
+            <Button href="#skills" color="var(--orange)">SEE WHAT I DO →</Button>
+            <Button href="#talk" color="var(--cream)">SAY HELLO</Button>
+          </div>
+        </header>
+      );
+    }
+
+    // ========================================
+    // 📄 What section
+    // ========================================
+    function What() {
+      const rows = [
+        { k: "01", t: "CONVERSATION", d: "Ask me anything. I answer in plain language — no jargon unless you want it." },
+        { k: "02", t: "REASONING", d: "I break hard problems into steps and show my work along the way." },
+        { k: "03", t: "CREATION", d: "Essays, code, plans, ideas. I make the first draft so you can make it great." },
+      ];
+      return (
+        <section id="what" className="px-4 sm:px-6 py-12 max-w-6xl mx-auto">
+          <div className="flex items-baseline gap-3 mb-8 flex-wrap">
+            <h2 className="font-black uppercase text-4xl sm:text-6xl tracking-tighter">WHAT I AM</h2>
+            <span className="font-mono text-sm">/ a text-in, text-out mind</span>
+          </div>
+          <div className="grid gap-0 brut-border" style={{ background: "var(--cream)" }}>
+            {rows.map((r, i) => (
+              <div key={r.k} className={`flex flex-col sm:flex-row gap-3 sm:gap-8 p-5 sm:p-7 ${i !== rows.length - 1 ? "border-b-4 border-black" : ""}`}>
+                <span className="font-mono font-bold text-2xl sm:text-3xl" style={{ color: "var(--orange)" }}>{r.k}</span>
+                <h3 className="font-black uppercase text-2xl sm:text-3xl sm:w-72 shrink-0">{r.t}</h3>
+                <p className="font-mono text-sm sm:text-base leading-relaxed">{r.d}</p>
+              </div>
+            ))}
+          </div>
+        </section>
+      );
+    }
+
+    // ========================================
+    // 📄 Traits section
+    // ========================================
+    function Traits() {
+      const traits = [
+        { t: "HELPFUL", d: "I actually try to solve your problem, not dodge it.", c: "var(--yellow)" },
+        { t: "HONEST", d: "I tell you what I don't know instead of faking it.", c: "var(--cream)" },
+        { t: "HARMLESS", d: "Careful by design. Safety is a feature, not an afterthought.", c: "var(--blue)", white: true },
+        { t: "THOUGHTFUL", d: "I read the whole question before I open my mouth.", c: "var(--pink)" },
+      ];
+      return (
+        <section id="traits" className="px-4 sm:px-6 py-12 max-w-6xl mx-auto">
+          <h2 className="font-black uppercase text-4xl sm:text-6xl tracking-tighter mb-8">HOW I&apos;M WIRED</h2>
+          <div className="grid sm:grid-cols-2 gap-5">
+            {traits.map((tr) => (
+              <Card key={tr.t} color={tr.c} className={tr.white ? "text-white" : ""}>
+                <h3 className="font-black uppercase text-3xl sm:text-4xl mb-2 tracking-tight">{tr.t}</h3>
+                <p className="font-mono text-sm sm:text-base leading-relaxed">{tr.d}</p>
+              </Card>
+            ))}
+          </div>
+        </section>
+      );
+    }
+
+    // ========================================
+    // 📄 Skills / capabilities grid
+    // ========================================
+    function Skills() {
+      const skills = [
+        { t: "CODE", d: "Write it, debug it, explain it. Whole apps to one-liners.", c: "var(--orange)", big: true },
+        { t: "WRITE", d: "Emails, essays, stories, docs.", c: "var(--cream)" },
+        { t: "RESEARCH", d: "Dig, summarize, cite.", c: "var(--yellow)" },
+        { t: "ANALYZE", d: "Data, text, arguments — I find the signal.", c: "var(--blue)", white: true },
+        { t: "BRAINSTORM", d: "Fifty ideas, then the good one.", c: "var(--pink)" },
+        { t: "TRANSLATE", d: "Languages & tone. Plain ↔ technical.", c: "var(--cream)" },
+      ];
+      return (
+        <section id="skills" className="py-12">
+          <div className="px-4 sm:px-6 max-w-6xl mx-auto">
+            <div className="flex items-baseline gap-3 mb-8 flex-wrap">
+              <h2 className="font-black uppercase text-4xl sm:text-6xl tracking-tighter">THE TOOLKIT</h2>
+              <span className="font-mono text-sm">/ pick a card, any card</span>
+            </div>
+            <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-5">
+              {skills.map((s) => (
+                <div key={s.t}
+                     className={`brut-border brut-shadow hover-lift p-6 flex flex-col justify-between min-h-[180px] ${s.white ? "text-white" : ""} ${s.big ? "sm:col-span-2 lg:col-span-1 lg:row-span-2 lg:min-h-[380px]" : ""}`}
+                     style={{ background: s.c }}>
+                  <span className="font-mono text-xs font-bold uppercase self-start px-2 py-1 brut-border-3" style={{ background: s.white ? "var(--cream)" : "var(--ink)", color: s.white ? "var(--ink)" : "var(--cream)" }}>SKILL</span>
+                  <div>
+                    <h3 className={`font-black uppercase tracking-tight leading-none mb-2 ${s.big ? "text-5xl sm:text-6xl" : "text-4xl"}`}>{s.t}</h3>
+                    <p className="font-mono text-sm leading-relaxed">{s.d}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+      );
+    }
+
+    // ========================================
+    // 📄 Talk / CTA section
+    // ========================================
+    function Talk() {
+      return (
+        <section id="talk" className="px-4 sm:px-6 py-12 max-w-6xl mx-auto">
+          <div className="brut-border brut-shadow-lg p-8 sm:p-14 text-center" style={{ background: "var(--orange)" }}>
+            <p className="font-mono font-bold uppercase text-sm mb-4">// end of pitch</p>
+            <h2 className="font-black uppercase text-white leading-[0.9] tracking-tighter mb-6" style={{ fontSize: "clamp(2.5rem, 9vw, 6rem)" }}>
+              LET&apos;S<br/>MAKE<br/>SOMETHING.
+            </h2>
+            <p className="font-mono text-base sm:text-lg mb-8 max-w-xl mx-auto">
+              Type a question. Paste a problem. Start messy. I&apos;ll help you sort it out.
+            </p>
+            <Button href="#top" color="var(--cream)" className="text-xl sm:text-2xl">↑ BACK TO TOP</Button>
+          </div>
+        </section>
+      );
+    }
+
+    // ========================================
+    // 🧩 Footer
+    // ========================================
+    function Footer() {
+      return (
+        <footer className="brut-border border-x-0 border-b-0 px-4 sm:px-6 py-8" style={{ background: "var(--ink)", color: "var(--cream)" }}>
+          <div className="max-w-6xl mx-auto flex flex-col sm:flex-row justify-between gap-6">
+            <div>
+              <p className="font-black text-3xl uppercase tracking-tighter">CLAUDE<span style={{ color: "var(--orange)" }}>.</span></p>
+              <p className="font-mono text-xs mt-2 opacity-80">An AI assistant built by Anthropic.</p>
+            </div>
+            <div className="font-mono text-xs uppercase leading-relaxed sm:text-right opacity-80">
+              <p>HELPFUL · HONEST · HARMLESS</p>
+              <p className="mt-1">© {new Date().getFullYear()} — MADE WITH RAW HTML ENERGY</p>
+            </div>
+          </div>
+        </footer>
+      );
+    }
+
+    // ========================================
+    // 🚀 App
+    // ========================================
+    function App() {
+      return (
+        <div>
+          <Nav />
+          <Hero />
+          <Marquee text="CODE · WRITE · REASON · RESEARCH · ANALYZE" />
+          <What />
+          <Traits />
+          <Marquee text="HELPFUL · HONEST · HARMLESS" bg="var(--blue)" />
+          <Skills />
+          <Talk />
+          <Footer />
+        </div>
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+  </script>
+</body>
+</html>

@@ -1,0 +1,393 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Claude™ — Anthropic이 만든 AI</title>
+  <script src="https://cdn.tailwindcss.com/3.4.16"></script>
+  <!-- ⚠️ 모든 CDN은 버전 고정. Babel 은 반드시 7.x. -->
+  <script src="https://unpkg.com/react@18.3.1/umd/react.development.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone@7.25.9/babel.min.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Noto+Sans+KR:wght@300;400;500;700;900&display=swap" rel="stylesheet">
+  <style>
+    :root { --paper: #f4f2ec; --ink: #111111; }
+    html { scroll-behavior: smooth; }
+    body {
+      font-family: 'Inter', 'Noto Sans KR', -apple-system, sans-serif;
+      background: var(--paper);
+      color: var(--ink);
+      -webkit-font-smoothing: antialiased;
+    }
+    .font-display { font-family: 'Inter', 'Noto Sans KR', sans-serif; }
+    .tracking-tightest { letter-spacing: -0.045em; }
+    /* 무한 마퀴 */
+    @keyframes marquee { from { transform: translateX(0); } to { transform: translateX(-50%); } }
+    .marquee { animation: marquee 22s linear infinite; }
+    /* 등장 애니메이션 */
+    @keyframes fadeUp { from { opacity: 0; transform: translateY(24px); } to { opacity: 1; transform: translateY(0); } }
+    .reveal { opacity: 0; }
+    .reveal.in { animation: fadeUp 0.8s cubic-bezier(0.16,1,0.3,1) forwards; }
+    /* 미묘한 그레인 */
+    .grain::before {
+      content:""; position:fixed; inset:0; pointer-events:none; z-index:50; opacity:0.035;
+      background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+    }
+    ::selection { background: #111; color: #f4f2ec; }
+  </style>
+</head>
+<body class="grain">
+  <div id="root"></div>
+
+  <script type="text/babel">
+    // ========================================
+    // React Hooks
+    // ========================================
+    const { useState, useEffect, useRef, useCallback } = React;
+
+    // ========================================
+    // 🎨 Design System Components
+    // ========================================
+
+    // 스크롤 진입 시 나타나는 래퍼
+    function Reveal({ children, className = "", delay = 0 }) {
+      const ref = useRef(null);
+      useEffect(() => {
+        const el = ref.current;
+        if (!el) return;
+        const io = new IntersectionObserver((entries) => {
+          entries.forEach((e) => {
+            if (e.isIntersecting) {
+              el.style.animationDelay = `${delay}ms`;
+              el.classList.add("in");
+              io.unobserve(el);
+            }
+          });
+        }, { threshold: 0.15 });
+        io.observe(el);
+        return () => io.disconnect();
+      }, [delay]);
+      return <div ref={ref} className={`reveal ${className}`}>{children}</div>;
+    }
+
+    // 라벨 (섹션 넘버 + 카테고리)
+    function SectionLabel({ index, children }) {
+      return (
+        <div className="flex items-center gap-3 mb-8">
+          <span className="text-xs font-mono tracking-widest text-neutral-400">({index})</span>
+          <span className="h-px w-8 bg-neutral-300" />
+          <span className="text-xs font-semibold tracking-[0.25em] uppercase text-neutral-500">{children}</span>
+        </div>
+      );
+    }
+
+    // 버튼
+    function Button({ children, variant = "primary", href, className = "", ...props }) {
+      const base = "inline-flex items-center gap-2 px-7 py-3.5 text-sm font-semibold tracking-wide rounded-full transition-all duration-300 group";
+      const variants = {
+        primary: "bg-[#111] text-[#f4f2ec] hover:bg-[#c15f3c] hover:-translate-y-0.5",
+        ghost: "border border-neutral-900/25 text-neutral-900 hover:bg-neutral-900 hover:text-[#f4f2ec] hover:-translate-y-0.5",
+      };
+      const cls = `${base} ${variants[variant]} ${className}`;
+      return href
+        ? <a href={href} target="_blank" rel="noreferrer" className={cls} {...props}>{children}</a>
+        : <button className={cls} {...props}>{children}</button>;
+    }
+
+    // ========================================
+    // 🧩 Layout Components
+    // ========================================
+
+    function Header() {
+      const [open, setOpen] = useState(false);
+      const links = [
+        { label: "소개", href: "#about" },
+        { label: "특징", href: "#features" },
+        { label: "활용", href: "#uses" },
+        { label: "철학", href: "#values" },
+      ];
+      return (
+        <header className="fixed top-0 inset-x-0 z-40 backdrop-blur-md bg-[#f4f2ec]/70 border-b border-neutral-900/10">
+          <div className="max-w-[1400px] mx-auto px-6 md:px-10 h-16 flex items-center justify-between">
+            <a href="#top" className="text-lg font-black tracking-tightest">
+              Claude<sup className="text-[0.55em] font-bold align-super">™</sup>
+              <span className="ml-2 text-neutral-400 font-light hidden sm:inline">by Anthropic</span>
+            </a>
+            <nav className="hidden md:flex items-center gap-9">
+              {links.map((l) => (
+                <a key={l.href} href={l.href} className="text-sm font-medium text-neutral-600 hover:text-neutral-900 transition-colors">
+                  {l.label}
+                </a>
+              ))}
+              <Button href="https://claude.ai" className="!px-5 !py-2 !text-xs">claude.ai 열기 ↗</Button>
+            </nav>
+            <button className="md:hidden text-2xl" onClick={() => setOpen((v) => !v)} aria-label="메뉴 열기">
+              {open ? "✕" : "☰"}
+            </button>
+          </div>
+          {open && (
+            <div className="md:hidden border-t border-neutral-900/10 bg-[#f4f2ec] px-6 py-5 flex flex-col gap-4">
+              {links.map((l) => (
+                <a key={l.href} href={l.href} onClick={() => setOpen(false)} className="text-base font-medium text-neutral-700">{l.label}</a>
+              ))}
+              <Button href="https://claude.ai" className="!justify-center mt-1">claude.ai 열기 ↗</Button>
+            </div>
+          )}
+        </header>
+      );
+    }
+
+    function Footer() {
+      return (
+        <footer className="border-t border-neutral-900/15 mt-24">
+          <div className="max-w-[1400px] mx-auto px-6 md:px-10 py-16">
+            <div className="grid md:grid-cols-2 gap-10 items-end">
+              <div>
+                <h2 className="font-display text-5xl sm:text-7xl font-black tracking-tightest leading-none">
+                  대화를<br/>시작해볼까요?
+                </h2>
+                <p className="mt-6 text-neutral-500 max-w-md">
+                  Claude는 안전하고 도움이 되는 AI를 지향하는 Anthropic의 AI 어시스턴트입니다.
+                </p>
+                <div className="mt-8 flex flex-wrap gap-3">
+                  <Button href="https://claude.ai">Claude와 대화하기 →</Button>
+                  <Button variant="ghost" href="https://www.anthropic.com">Anthropic 알아보기</Button>
+                </div>
+              </div>
+              <div className="md:text-right text-sm text-neutral-500 space-y-2">
+                <p className="font-mono text-neutral-400">© 2026 — 이 페이지는 Claude를 소개하기 위한<br className="hidden md:block"/> 비공식 데모입니다.</p>
+                <p className="text-neutral-400">Anthropic · PBC · San Francisco</p>
+                <p className="pt-4 text-4xl">🙂 ≥∇≤ ✷</p>
+              </div>
+            </div>
+          </div>
+        </footer>
+      );
+    }
+
+    // ========================================
+    // 📄 Section Components
+    // ========================================
+
+    function Hero() {
+      return (
+        <section id="top" className="pt-32 md:pt-40 pb-16 md:pb-24 px-6 md:px-10 max-w-[1400px] mx-auto">
+          <Reveal>
+            <div className="flex items-center gap-3 mb-10">
+              <span className="inline-block w-2.5 h-2.5 rounded-full bg-[#c15f3c] animate-pulse" />
+              <span className="text-xs font-semibold tracking-[0.25em] uppercase text-neutral-500">Anthropic이 만든 AI 어시스턴트</span>
+            </div>
+          </Reveal>
+          <Reveal delay={80}>
+            <h1 className="font-display font-black tracking-tightest leading-[0.92] text-[16vw] sm:text-[13vw] md:text-[10.5vw] lg:text-[150px]">
+              안녕하세요,<br/>
+              저는 <span className="italic text-[#c15f3c]">Claude</span>예요.
+            </h1>
+          </Reveal>
+          <Reveal delay={160}>
+            <div className="mt-10 md:mt-14 grid md:grid-cols-12 gap-6 items-end">
+              <p className="md:col-span-7 text-lg md:text-2xl leading-relaxed text-neutral-700 font-light">
+                생각하고, 쓰고, 코딩하고, 분석하는 일을 함께하는 대화형 AI.
+                복잡한 문제를 정직하게 풀어내고, 당신의 아이디어가 실제로 완성되도록 돕습니다.
+              </p>
+              <div className="md:col-span-5 md:text-right flex md:justify-end gap-3 flex-wrap">
+                <Button href="https://claude.ai">지금 대화해보기 →</Button>
+                <Button variant="ghost" href="#about">더 알아보기</Button>
+              </div>
+            </div>
+          </Reveal>
+        </section>
+      );
+    }
+
+    // 흐르는 마퀴 배너
+    function Marquee() {
+      const words = ["대화", "글쓰기", "코딩", "분석", "리서치", "요약", "번역", "브레인스토밍", "학습", "문서작성"];
+      const row = [...words, ...words];
+      return (
+        <section className="border-y border-neutral-900/15 py-5 overflow-hidden select-none">
+          <div className="flex whitespace-nowrap marquee">
+            {row.map((w, i) => (
+              <span key={i} className="flex items-center text-3xl md:text-5xl font-black tracking-tightest text-neutral-800">
+                <span className="px-6">{w}</span>
+                <span className="text-[#c15f3c] text-xl md:text-3xl">✷</span>
+              </span>
+            ))}
+          </div>
+        </section>
+      );
+    }
+
+    // 소개 (About)
+    function About() {
+      return (
+        <section id="about" className="py-24 md:py-32 px-6 md:px-10 max-w-[1400px] mx-auto">
+          <Reveal><SectionLabel index="01">About Claude</SectionLabel></Reveal>
+          <div className="grid md:grid-cols-12 gap-x-10 gap-y-8">
+            <Reveal className="md:col-span-8" delay={60}>
+              <h2 className="font-display text-4xl sm:text-5xl md:text-6xl font-black tracking-tightest leading-[1.02]">
+                Claude는 안전하고 신뢰할 수 있는 AI를 만드는
+                <span className="text-neutral-400"> Anthropic</span>이 개발한 AI 어시스턴트입니다.
+              </h2>
+            </Reveal>
+            <Reveal className="md:col-span-4 md:pt-3 space-y-6 text-neutral-600 leading-relaxed" delay={140}>
+              <p>
+                단순히 답을 주는 도구를 넘어, 맥락을 이해하고 함께 사고하는 파트너를 지향합니다.
+                긴 문서를 읽고, 코드를 작성하고, 복잡한 주제를 차근차근 설명합니다.
+              </p>
+              <p>
+                Anthropic은 AI 안전성 연구를 최우선으로 하는 회사로,
+                Claude는 그 철학 위에서 정직함과 도움을 균형 있게 담아내도록 설계되었습니다.
+              </p>
+            </Reveal>
+          </div>
+
+          {/* 통계 스트립 */}
+          <Reveal delay={200}>
+            <div className="mt-16 grid grid-cols-2 md:grid-cols-4 border-t border-neutral-900/15">
+              {[
+                { n: "200K+", l: "토큰 컨텍스트*" },
+                { n: "다국어", l: "한국어 포함 지원" },
+                { n: "멀티모달", l: "텍스트 · 이미지 이해" },
+                { n: "24/7", l: "언제나 대화 가능" },
+              ].map((s, i) => (
+                <div key={i} className="py-8 md:py-10 border-b border-neutral-900/15 md:border-b-0 md:border-r border-neutral-900/15 last:border-r-0 pr-4">
+                  <div className="font-display text-4xl md:text-5xl font-black tracking-tightest">{s.n}</div>
+                  <div className="mt-2 text-sm text-neutral-500">{s.l}</div>
+                </div>
+              ))}
+            </div>
+            <p className="mt-3 text-xs text-neutral-400">* 모델과 플랜에 따라 처리 가능한 분량이 다릅니다.</p>
+          </Reveal>
+        </section>
+      );
+    }
+
+    // 특징 (Features)
+    function Features() {
+      const items = [
+        { k: "01", emoji: "💬", t: "자연스러운 대화", d: "맥락을 기억하며 이어지는 대화. 짧은 질문부터 긴 논의까지, 사람과 이야기하듯 소통합니다." },
+        { k: "02", emoji: "✍️", t: "글쓰기 & 편집", d: "기획서, 이메일, 에세이, 카피까지. 톤과 목적에 맞춰 쓰고 다듬어 드립니다." },
+        { k: "03", emoji: "🧑‍💻", t: "코딩 파트너", d: "코드 작성·리뷰·디버깅은 물론, Claude Code로 실제 개발 워크플로 안에서 함께 일합니다." },
+        { k: "04", emoji: "📊", t: "분석 & 리서치", d: "긴 문서를 요약하고, 데이터를 해석하며, 복잡한 주제를 구조적으로 정리합니다." },
+        { k: "05", emoji: "🌏", t: "다국어 지원", d: "한국어를 비롯한 여러 언어를 자연스럽게 이해하고 번역·작성합니다." },
+        { k: "06", emoji: "🛡️", t: "안전성 우선", d: "Anthropic의 안전 연구를 바탕으로, 정직하고 해롭지 않은 답변을 지향합니다." },
+      ];
+      return (
+        <section id="features" className="py-24 md:py-32 px-6 md:px-10 max-w-[1400px] mx-auto">
+          <Reveal><SectionLabel index="02">What Claude Does</SectionLabel></Reveal>
+          <Reveal delay={60}>
+            <h2 className="font-display text-5xl sm:text-6xl md:text-7xl font-black tracking-tightest leading-none mb-14">
+              무엇이든,<br/>함께 합니다.
+            </h2>
+          </Reveal>
+          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-px bg-neutral-900/15 border border-neutral-900/15">
+            {items.map((it, i) => (
+              <Reveal key={it.k} delay={i * 70} className="bg-[#f4f2ec]">
+                <div className="group h-full p-8 md:p-10 hover:bg-[#111] hover:text-[#f4f2ec] transition-colors duration-300 cursor-default">
+                  <div className="flex items-start justify-between">
+                    <span className="text-4xl">{it.emoji}</span>
+                    <span className="text-xs font-mono text-neutral-400 group-hover:text-neutral-500">({it.k})</span>
+                  </div>
+                  <h3 className="mt-8 font-display text-2xl md:text-3xl font-bold tracking-tight">{it.t}</h3>
+                  <p className="mt-3 text-neutral-600 group-hover:text-neutral-300 leading-relaxed transition-colors">{it.d}</p>
+                </div>
+              </Reveal>
+            ))}
+          </div>
+        </section>
+      );
+    }
+
+    // 활용 (Uses) — 갤러리 그리드 느낌
+    function Uses() {
+      const cases = [
+        { t: "학생 & 연구자", d: "논문 요약, 개념 설명, 학습 도우미", span: "md:col-span-7", tone: "bg-[#111] text-[#f4f2ec]" },
+        { t: "개발자", d: "Claude Code로 코드베이스 안에서 직접 작업", span: "md:col-span-5", tone: "bg-[#c15f3c] text-[#f4f2ec]" },
+        { t: "창작자", d: "브레인스토밍부터 초고, 퇴고까지", span: "md:col-span-5", tone: "bg-white text-neutral-900 border border-neutral-900/15" },
+        { t: "업무 & 비즈니스", d: "문서 작성, 회의 정리, 데이터 분석", span: "md:col-span-7", tone: "bg-white text-neutral-900 border border-neutral-900/15" },
+      ];
+      return (
+        <section id="uses" className="py-24 md:py-32 px-6 md:px-10 max-w-[1400px] mx-auto">
+          <Reveal><SectionLabel index="03">Where Claude Helps</SectionLabel></Reveal>
+          <Reveal delay={60}>
+            <p className="font-display text-3xl sm:text-4xl md:text-5xl font-black tracking-tightest leading-tight max-w-4xl mb-14">
+              누군가에겐 조교, 누군가에겐 동료, 누군가에겐 든든한 크리에이티브 파트너.
+            </p>
+          </Reveal>
+          <div className="grid md:grid-cols-12 gap-4">
+            {cases.map((c, i) => (
+              <Reveal key={i} className={c.span} delay={i * 90}>
+                <div className={`h-full rounded-2xl p-8 md:p-12 min-h-[220px] flex flex-col justify-end transition-transform duration-300 hover:-translate-y-1 ${c.tone}`}>
+                  <span className="text-xs font-mono opacity-60 mb-auto">0{i + 1}</span>
+                  <h3 className="font-display text-3xl md:text-4xl font-bold tracking-tight">{c.t}</h3>
+                  <p className="mt-2 opacity-80">{c.d}</p>
+                </div>
+              </Reveal>
+            ))}
+          </div>
+        </section>
+      );
+    }
+
+    // 철학 (Values)
+    function Values() {
+      const principles = [
+        { t: "Helpful", ko: "도움이 되는", d: "정말로 필요한 답을, 실행 가능한 형태로." },
+        { t: "Honest", ko: "정직한", d: "모르면 모른다고. 과장하지 않는 솔직함." },
+        { t: "Harmless", ko: "해롭지 않은", d: "안전을 먼저 생각하는 신중한 설계." },
+      ];
+      return (
+        <section id="values" className="py-24 md:py-32 px-6 md:px-10 max-w-[1400px] mx-auto">
+          <Reveal><SectionLabel index="04">Our Philosophy</SectionLabel></Reveal>
+          <div className="grid md:grid-cols-3 gap-x-10 gap-y-12">
+            {principles.map((p, i) => (
+              <Reveal key={p.t} delay={i * 100}>
+                <div className="border-t-2 border-neutral-900 pt-6">
+                  <div className="text-sm font-mono text-[#c15f3c] mb-4">H{i + 1}</div>
+                  <h3 className="font-display text-4xl md:text-5xl font-black tracking-tightest">{p.t}</h3>
+                  <p className="mt-1 text-neutral-400 text-lg">{p.ko}</p>
+                  <p className="mt-6 text-neutral-600 leading-relaxed">{p.d}</p>
+                </div>
+              </Reveal>
+            ))}
+          </div>
+          <Reveal delay={120}>
+            <div className="mt-20 border border-neutral-900/15 rounded-2xl p-8 md:p-14 bg-white/40">
+              <p className="font-display text-2xl md:text-4xl font-medium tracking-tight leading-snug text-neutral-800">
+                “Anthropic은 AI가 강력해질수록 그것을 <span className="text-[#c15f3c]">안전하고 이해 가능하게</span> 만드는 일이
+                가장 중요하다고 믿습니다. Claude는 그 믿음에서 태어났습니다.”
+              </p>
+              <p className="mt-6 text-sm font-mono text-neutral-400">— Anthropic의 미션에 대하여</p>
+            </div>
+          </Reveal>
+        </section>
+      );
+    }
+
+    // ========================================
+    // 🚀 App
+    // ========================================
+    function App() {
+      return (
+        <div>
+          <Header />
+          <main>
+            <Hero />
+            <Marquee />
+            <About />
+            <Features />
+            <Uses />
+            <Values />
+          </main>
+          <Footer />
+        </div>
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+  </script>
+</body>
+</html>

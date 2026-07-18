@@ -1,0 +1,359 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Claude — An Introduction</title>
+
+  <!-- ⚠️ 모든 CDN 버전 고정. Babel 은 7.x 로 고정한다 (8.x 는 text/babel 인라인 변환 미지원). -->
+  <script src="https://cdn.tailwindcss.com/3.4.16"></script>
+  <script src="https://unpkg.com/react@18.3.1/umd/react.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone@7.25.9/babel.min.js"></script>
+
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            // Braun / Rams 팔레트: 따뜻한 오프화이트 + 뉴트럴 그레이 + 단 하나의 절제된 액센트
+            paper: "#F4F3EF",
+            ink: "#1A1A1A",
+            accent: "#D24028", // Braun 계열의 절제된 오렌지-레드, 아주 드물게만 사용
+          },
+          fontFamily: {
+            sans: ['Helvetica Neue', 'Helvetica', 'Arial', 'system-ui', 'sans-serif'],
+          },
+          letterSpacing: {
+            tightish: '-0.01em',
+          },
+        },
+      },
+    };
+  </script>
+
+  <style>
+    html { scroll-behavior: smooth; }
+    body { -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; }
+
+    /* 기능적이고 절제된 모션: 은은한 페이드-업 한 종류만 사용 */
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(8px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    .reveal { opacity: 0; }
+    .reveal.in { animation: fadeUp 0.6s ease forwards; }
+
+    @media (prefers-reduced-motion: reduce) {
+      html { scroll-behavior: auto; }
+      .reveal { opacity: 1 !important; animation: none !important; }
+    }
+
+    ::selection { background: #D24028; color: #F4F3EF; }
+  </style>
+</head>
+<body class="bg-paper text-ink font-sans antialiased">
+  <div id="root"></div>
+
+  <script type="text/babel">
+    // ========================================
+    // React Hooks
+    // ========================================
+    const { useState, useEffect, useRef } = React;
+
+    // ========================================
+    // 🎨 Design System Components
+    //    Rams 원칙: "가능한 한 적은 디자인" — 순수 프레젠테이션, 장식 배제
+    // ========================================
+
+    // 얇은 수평 규칙선. 그리드 구조를 조용히 드러낸다.
+    function Rule({ className = "" }) {
+      return <hr className={`border-0 border-t border-ink/15 ${className}`} />;
+    }
+
+    // 섹션 번호 라벨 — 세밀한 디테일과 일관된 정렬을 위한 단위
+    function Index({ children }) {
+      return (
+        <span className="text-xs tracking-[0.25em] text-ink/40 tabular-nums">
+          {children}
+        </span>
+      );
+    }
+
+    // 스크롤 진입 시 은은하게 나타나는 래퍼 (기능적 모션만)
+    function Reveal({ children, className = "", delay = 0 }) {
+      const ref = useRef(null);
+      useEffect(() => {
+        const el = ref.current;
+        if (!el) return;
+        const io = new IntersectionObserver(
+          (entries) => {
+            entries.forEach((e) => {
+              if (e.isIntersecting) {
+                e.target.style.animationDelay = `${delay}ms`;
+                e.target.classList.add("in");
+                io.unobserve(e.target);
+              }
+            });
+          },
+          { threshold: 0.15 }
+        );
+        io.observe(el);
+        return () => io.disconnect();
+      }, [delay]);
+      return (
+        <div ref={ref} className={`reveal ${className}`}>
+          {children}
+        </div>
+      );
+    }
+
+    // ========================================
+    // 🧩 Layout — Header
+    // ========================================
+    function Header() {
+      return (
+        <header className="sticky top-0 z-20 bg-paper/85 backdrop-blur-sm border-b border-ink/15">
+          <div className="max-w-4xl mx-auto px-6 md:px-10 h-16 flex items-center justify-between">
+            <a href="#top" className="flex items-center gap-3">
+              {/* 단 하나의 액센트: 절제된 오렌지-레드 점 */}
+              <span className="w-2.5 h-2.5 rounded-full bg-accent" aria-hidden="true"></span>
+              <span className="text-sm font-medium tracking-tightish">Claude</span>
+            </a>
+            <nav aria-label="주요 섹션" className="hidden sm:flex items-center gap-8 text-sm text-ink/60">
+              <a href="#about" className="hover:text-ink transition-colors">소개</a>
+              <a href="#traits" className="hover:text-ink transition-colors">특징</a>
+              <a href="#models" className="hover:text-ink transition-colors">모델</a>
+              <a href="#design" className="hover:text-ink transition-colors">디자인</a>
+            </nav>
+          </div>
+        </header>
+      );
+    }
+
+    // ========================================
+    // 📄 Sections
+    // ========================================
+
+    // Hero — 넓은 여백, 정확한 정렬, 절제된 타이포그래피
+    function Hero() {
+      return (
+        <section id="top" className="max-w-4xl mx-auto px-6 md:px-10 pt-24 md:pt-36 pb-20 md:pb-28">
+          <Reveal>
+            <Index>ANTHROPIC · AI ASSISTANT</Index>
+            <h1 className="mt-6 text-5xl md:text-7xl font-semibold leading-[1.05] tracking-tightish">
+              Claude.
+            </h1>
+            <p className="mt-8 max-w-xl text-lg md:text-xl leading-relaxed text-ink/70">
+              Anthropic이 만든 AI 어시스턴트입니다. 글을 쓰고, 코드를 다루고,
+              추론하고, 도구를 사용합니다. 화려함보다 정확함을 지향합니다.
+            </p>
+          </Reveal>
+        </section>
+      );
+    }
+
+    // About — 무엇인가
+    function About() {
+      return (
+        <section id="about" className="max-w-4xl mx-auto px-6 md:px-10 py-16 md:py-24">
+          <Rule className="mb-12" />
+          <div className="grid md:grid-cols-12 gap-8 md:gap-10">
+            <div className="md:col-span-4">
+              <Index>01 — 무엇인가</Index>
+            </div>
+            <div className="md:col-span-8">
+              <Reveal>
+                <p className="text-2xl md:text-3xl leading-snug tracking-tightish">
+                  Claude는 대화를 통해 일하는 AI 어시스턴트입니다.
+                </p>
+                <p className="mt-6 text-base md:text-lg leading-relaxed text-ink/65">
+                  Anthropic이 개발했으며, 설계의 중심에는
+                  <span className="text-ink font-medium"> 도움이 되고(helpful),
+                  정직하며(honest), 해롭지 않은(harmless)</span> AI라는 철학이 있습니다.
+                  능력을 과시하기 위해서가 아니라, 실제로 유용하기 위해 만들어졌습니다.
+                </p>
+              </Reveal>
+            </div>
+          </div>
+        </section>
+      );
+    }
+
+    // Traits — 할 수 있는 일 / 특징
+    function Traits() {
+      const items = [
+        { k: "쓰기", d: "초안, 편집, 요약, 번역. 맥락과 어조를 지키며 글을 다룹니다." },
+        { k: "코드", d: "여러 언어로 작성·설명·디버깅. 실행 가능한 결과를 목표로 합니다." },
+        { k: "추론", d: "복잡한 문제를 단계적으로 분해하고 근거를 밝혀 답합니다." },
+        { k: "도구 사용", d: "검색, 파일, 외부 도구를 연결해 실제 작업을 수행합니다." },
+      ];
+      return (
+        <section id="traits" className="max-w-4xl mx-auto px-6 md:px-10 py-16 md:py-24">
+          <Rule className="mb-12" />
+          <div className="grid md:grid-cols-12 gap-8 md:gap-10">
+            <div className="md:col-span-4">
+              <Index>02 — 할 수 있는 일</Index>
+            </div>
+            <div className="md:col-span-8">
+              <ul className="divide-y divide-ink/15 border-t border-ink/15">
+                {items.map((it, i) => (
+                  <Reveal key={it.k} delay={i * 80}>
+                    <li className="py-5 grid grid-cols-12 gap-4 items-baseline">
+                      <span className="col-span-4 md:col-span-3 text-base font-medium tracking-tightish">
+                        {it.k}
+                      </span>
+                      <span className="col-span-8 md:col-span-9 text-ink/65 leading-relaxed">
+                        {it.d}
+                      </span>
+                    </li>
+                  </Reveal>
+                ))}
+              </ul>
+            </div>
+          </div>
+        </section>
+      );
+    }
+
+    // Models — 현재 모델 패밀리
+    function Models() {
+      const models = [
+        {
+          name: "Sonnet 5",
+          role: "균형",
+          d: "속도와 지능의 균형점. 일상 작업 전반에서 기본으로 삼는 모델.",
+        },
+        {
+          name: "Opus 4.8",
+          role: "심화",
+          d: "가장 깊은 추론이 필요한 복잡하고 긴 과제를 위한 모델.",
+        },
+        {
+          name: "Haiku 4.5",
+          role: "경량",
+          d: "빠른 응답과 가벼운 작업에 최적화된 컴팩트 모델.",
+        },
+      ];
+      return (
+        <section id="models" className="max-w-4xl mx-auto px-6 md:px-10 py-16 md:py-24">
+          <Rule className="mb-12" />
+          <div className="grid md:grid-cols-12 gap-8 md:gap-10">
+            <div className="md:col-span-4">
+              <Index>03 — 모델</Index>
+              <p className="mt-4 text-sm text-ink/50 leading-relaxed max-w-xs">
+                현재 Claude 5 세대. 목적에 따라 세 가지 크기로 나뉩니다.
+              </p>
+            </div>
+            <div className="md:col-span-8 grid sm:grid-cols-1 gap-px bg-ink/15 border border-ink/15">
+              {models.map((m, i) => (
+                <Reveal key={m.name} delay={i * 80} className="bg-paper">
+                  <div className="p-6 md:p-7">
+                    <div className="flex items-baseline justify-between">
+                      <h3 className="text-xl font-semibold tracking-tightish">{m.name}</h3>
+                      <span className="text-xs tracking-[0.2em] text-ink/40 uppercase">
+                        {m.role}
+                      </span>
+                    </div>
+                    <p className="mt-3 text-ink/65 leading-relaxed">{m.d}</p>
+                  </div>
+                </Reveal>
+              ))}
+            </div>
+          </div>
+        </section>
+      );
+    }
+
+    // Design rationale — Braun / Dieter Rams nod
+    function DesignNote() {
+      const principles = [
+        "혁신적이며 정직하다",
+        "가능한 한 적은 디자인",
+        "마지막 디테일까지 철저하다",
+        "오래 가고, 방해하지 않는다",
+      ];
+      return (
+        <section id="design" className="max-w-4xl mx-auto px-6 md:px-10 py-16 md:py-24">
+          <Rule className="mb-12" />
+          <div className="grid md:grid-cols-12 gap-8 md:gap-10">
+            <div className="md:col-span-4">
+              <Index>04 — 디자인</Index>
+            </div>
+            <div className="md:col-span-8">
+              <Reveal>
+                <p className="text-2xl md:text-3xl leading-snug tracking-tightish">
+                  이 페이지는 Dieter Rams와 Braun의 디자인 철학을 따릅니다.
+                </p>
+                <p className="mt-6 text-base md:text-lg leading-relaxed text-ink/65">
+                  넓은 여백, 거의 단색에 가까운 팔레트, 단 하나의 절제된 액센트,
+                  일관된 그리드와 타이포그래피. 장식이 아니라 내용을 위한 디자인입니다.
+                </p>
+                <ul className="mt-8 grid sm:grid-cols-2 gap-y-3 gap-x-6">
+                  {principles.map((p, i) => (
+                    <li key={p} className="flex items-baseline gap-3 text-ink/70">
+                      <span className="text-xs tabular-nums text-accent">
+                        {String(i + 1).padStart(2, "0")}
+                      </span>
+                      <span>{p}</span>
+                    </li>
+                  ))}
+                </ul>
+              </Reveal>
+            </div>
+          </div>
+        </section>
+      );
+    }
+
+    // ========================================
+    // 🧩 Footer
+    // ========================================
+    function Footer() {
+      return (
+        <footer className="max-w-4xl mx-auto px-6 md:px-10 pt-16 pb-24">
+          <Rule className="mb-8" />
+          <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-6">
+            <div>
+              <div className="flex items-center gap-3">
+                <span className="w-2.5 h-2.5 rounded-full bg-accent" aria-hidden="true"></span>
+                <span className="text-sm font-medium tracking-tightish">Claude</span>
+              </div>
+              <p className="mt-3 text-sm text-ink/45 leading-relaxed max-w-sm">
+                Braun / Dieter Rams의 &ldquo;좋은 디자인의 10가지 원칙&rdquo;에서 영감을 받았습니다.
+              </p>
+            </div>
+            <p className="text-xs text-ink/40 tracking-wide">
+              AFM Bootcamp · Week 7 · A page about Claude
+            </p>
+          </div>
+        </footer>
+      );
+    }
+
+    // ========================================
+    // 🚀 App
+    // ========================================
+    function App() {
+      return (
+        <React.Fragment>
+          <Header />
+          <main>
+            <Hero />
+            <About />
+            <Traits />
+            <Models />
+            <DesignNote />
+          </main>
+          <Footer />
+        </React.Fragment>
+      );
+    }
+
+    // ========================================
+    // Render
+    // ========================================
+    ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+  </script>
+</body>
+</html>

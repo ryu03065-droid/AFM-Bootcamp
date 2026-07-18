@@ -1,0 +1,498 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Claude — Anthropic이 만든 AI 어시스턴트</title>
+
+  <!-- ⚠️ 모든 CDN 버전 고정. Babel 은 반드시 7.x (8.x 는 인라인 text/babel 미지원) -->
+  <script src="https://cdn.tailwindcss.com/3.4.16"></script>
+  <script src="https://unpkg.com/react@18.3.1/umd/react.development.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone@7.25.9/babel.min.js"></script>
+
+  <style>
+    html { scroll-behavior: smooth; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Helvetica Neue",
+        "Segoe UI", "Apple SD Gothic Neo", "Noto Sans KR", Arial, sans-serif;
+      -webkit-font-smoothing: antialiased;
+      text-rendering: optimizeLegibility;
+    }
+
+    /* 스크롤 페이드인 */
+    .reveal {
+      opacity: 0;
+      transform: translateY(28px);
+      transition: opacity 1s cubic-bezier(0.16, 1, 0.3, 1),
+        transform 1s cubic-bezier(0.16, 1, 0.3, 1);
+      will-change: opacity, transform;
+    }
+    .reveal.is-visible {
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    /* Hero 그라데이션 텍스트 */
+    .gradient-text {
+      background: linear-gradient(135deg, #1d1d1f 0%, #6e6e73 60%, #c96442 130%);
+      -webkit-background-clip: text;
+      background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    /* 아주 은은한 배경 오브 애니메이션 */
+    @keyframes floatOrb {
+      0%, 100% { transform: translate(0, 0) scale(1); }
+      50% { transform: translate(20px, -30px) scale(1.08); }
+    }
+    .orb { animation: floatOrb 14s ease-in-out infinite; }
+
+    ::selection { background: rgba(201, 100, 66, 0.18); }
+  </style>
+</head>
+<body class="bg-white text-neutral-900 antialiased">
+  <div id="root"></div>
+
+  <script type="text/babel">
+    // ========================================
+    // React Hooks
+    // ========================================
+    const { useState, useEffect, useRef, useCallback } = React;
+
+    // ========================================
+    // 🎨 Design System — Reveal (스크롤 페이드인 래퍼)
+    // ========================================
+    function Reveal({ children, className = "", delay = 0, as: Tag = "div" }) {
+      const ref = useRef(null);
+      const [visible, setVisible] = useState(false);
+
+      useEffect(() => {
+        const el = ref.current;
+        if (!el) return;
+        const io = new IntersectionObserver(
+          (entries) => {
+            entries.forEach((entry) => {
+              if (entry.isIntersecting) {
+                setVisible(true);
+                io.unobserve(entry.target);
+              }
+            });
+          },
+          { threshold: 0.15, rootMargin: "0px 0px -8% 0px" }
+        );
+        io.observe(el);
+        return () => io.disconnect();
+      }, []);
+
+      return (
+        <Tag
+          ref={ref}
+          className={`reveal ${visible ? "is-visible" : ""} ${className}`}
+          style={{ transitionDelay: `${delay}ms` }}
+        >
+          {children}
+        </Tag>
+      );
+    }
+
+    // ========================================
+    // 🎨 Design System — Section (넉넉한 여백 섹션)
+    // ========================================
+    function Section({ id, children, className = "" }) {
+      return (
+        <section
+          id={id}
+          className={`px-6 sm:px-8 py-24 sm:py-32 lg:py-40 ${className}`}
+        >
+          <div className="mx-auto max-w-6xl">{children}</div>
+        </section>
+      );
+    }
+
+    // ========================================
+    // 🎨 Design System — FeatureCard
+    // ========================================
+    function FeatureCard({ icon, title, desc, delay }) {
+      return (
+        <Reveal delay={delay}>
+          <div className="group h-full rounded-3xl border border-neutral-200/70 bg-white/60 p-8 backdrop-blur-xl transition-all duration-500 hover:-translate-y-1 hover:border-neutral-300 hover:shadow-[0_20px_60px_-20px_rgba(0,0,0,0.15)]">
+            <div className="mb-6 flex h-12 w-12 items-center justify-center rounded-2xl bg-neutral-900 text-2xl text-white transition-transform duration-500 group-hover:scale-110">
+              {icon}
+            </div>
+            <h3 className="mb-3 text-xl font-semibold tracking-tight text-neutral-900">
+              {title}
+            </h3>
+            <p className="text-[15px] leading-relaxed text-neutral-500">{desc}</p>
+          </div>
+        </Reveal>
+      );
+    }
+
+    // ========================================
+    // 🎨 Design System — ModelCard
+    // ========================================
+    function ModelCard({ name, tagline, desc, accent, delay }) {
+      return (
+        <Reveal delay={delay}>
+          <div className="relative h-full overflow-hidden rounded-3xl bg-neutral-950 p-8 sm:p-10 text-white">
+            <div
+              className="orb pointer-events-none absolute -right-16 -top-16 h-52 w-52 rounded-full blur-3xl opacity-40"
+              style={{ background: accent }}
+            />
+            <div className="relative">
+              <p className="mb-2 text-sm font-medium uppercase tracking-[0.2em] text-white/40">
+                Claude
+              </p>
+              <h3 className="mb-1 text-3xl font-semibold tracking-tight">{name}</h3>
+              <p className="mb-6 text-sm font-medium" style={{ color: accent }}>
+                {tagline}
+              </p>
+              <p className="text-[15px] leading-relaxed text-white/60">{desc}</p>
+            </div>
+          </div>
+        </Reveal>
+      );
+    }
+
+    // ========================================
+    // 🧩 Nav (glassmorphism)
+    // ========================================
+    function Nav() {
+      const [scrolled, setScrolled] = useState(false);
+
+      useEffect(() => {
+        const onScroll = () => setScrolled(window.scrollY > 20);
+        window.addEventListener("scroll", onScroll, { passive: true });
+        onScroll();
+        return () => window.removeEventListener("scroll", onScroll);
+      }, []);
+
+      const links = [
+        { href: "#about", label: "소개" },
+        { href: "#features", label: "역량" },
+        { href: "#models", label: "모델" },
+      ];
+
+      return (
+        <header
+          className={`fixed inset-x-0 top-0 z-50 transition-all duration-500 ${
+            scrolled
+              ? "border-b border-neutral-200/60 bg-white/70 backdrop-blur-xl"
+              : "border-b border-transparent bg-transparent"
+          }`}
+        >
+          <div className="mx-auto flex h-14 max-w-6xl items-center justify-between px-6 sm:px-8">
+            <a href="#top" className="text-[17px] font-semibold tracking-tight">
+              Claude
+            </a>
+            <nav className="hidden gap-8 sm:flex">
+              {links.map((l) => (
+                <a
+                  key={l.href}
+                  href={l.href}
+                  className="text-[13px] font-medium text-neutral-500 transition-colors hover:text-neutral-900"
+                >
+                  {l.label}
+                </a>
+              ))}
+            </nav>
+            <a
+              href="#about"
+              className="rounded-full bg-neutral-900 px-4 py-1.5 text-[13px] font-medium text-white transition-transform duration-300 hover:scale-105"
+            >
+              알아보기
+            </a>
+          </div>
+        </header>
+      );
+    }
+
+    // ========================================
+    // 📄 Hero
+    // ========================================
+    function Hero() {
+      return (
+        <section
+          id="top"
+          className="relative flex min-h-screen items-center justify-center overflow-hidden px-6"
+        >
+          {/* 은은한 배경 그라데이션 오브 */}
+          <div className="pointer-events-none absolute inset-0">
+            <div className="orb absolute left-1/2 top-1/3 h-[520px] w-[520px] -translate-x-1/2 rounded-full bg-gradient-to-br from-orange-100 via-rose-50 to-transparent blur-3xl opacity-70" />
+            <div
+              className="orb absolute right-[12%] top-[20%] h-72 w-72 rounded-full bg-gradient-to-br from-neutral-200 to-transparent blur-3xl opacity-60"
+              style={{ animationDelay: "-6s" }}
+            />
+          </div>
+
+          <div className="relative z-10 text-center">
+            <Reveal>
+              <span className="mb-8 inline-block rounded-full border border-neutral-200 bg-white/60 px-4 py-1.5 text-[13px] font-medium text-neutral-500 backdrop-blur-md">
+                Anthropic이 만든 AI 어시스턴트
+              </span>
+            </Reveal>
+
+            <Reveal delay={100}>
+              <h1 className="gradient-text text-7xl font-semibold leading-[0.95] tracking-tight sm:text-8xl lg:text-[10rem]">
+                Claude
+              </h1>
+            </Reveal>
+
+            <Reveal delay={220}>
+              <p className="mx-auto mt-8 max-w-2xl text-xl font-light leading-relaxed text-neutral-500 sm:text-2xl">
+                생각하고, 쓰고, 만들고, 함께 고민하는
+                <br className="hidden sm:block" />
+                당신 곁의 대화형 AI.
+              </p>
+            </Reveal>
+
+            <Reveal delay={340}>
+              <div className="mt-12 flex flex-col items-center justify-center gap-3 sm:flex-row">
+                <a
+                  href="#about"
+                  className="w-full rounded-full bg-neutral-900 px-8 py-3.5 text-[15px] font-medium text-white transition-transform duration-300 hover:scale-105 sm:w-auto"
+                >
+                  Claude 알아보기
+                </a>
+                <a
+                  href="#models"
+                  className="w-full rounded-full border border-neutral-300 bg-white/50 px-8 py-3.5 text-[15px] font-medium text-neutral-900 backdrop-blur-md transition-colors hover:bg-white sm:w-auto"
+                >
+                  모델 살펴보기
+                </a>
+              </div>
+            </Reveal>
+          </div>
+
+          {/* 스크롤 인디케이터 */}
+          <div className="absolute bottom-10 left-1/2 -translate-x-1/2">
+            <div className="flex h-9 w-5 items-start justify-center rounded-full border border-neutral-300 p-1">
+              <div className="h-2 w-1 animate-bounce rounded-full bg-neutral-400" />
+            </div>
+          </div>
+        </section>
+      );
+    }
+
+    // ========================================
+    // 📄 About
+    // ========================================
+    function About() {
+      return (
+        <Section id="about" className="bg-neutral-50">
+          <div className="mx-auto max-w-3xl text-center">
+            <Reveal>
+              <p className="mb-4 text-sm font-semibold uppercase tracking-[0.2em] text-neutral-400">
+                What is Claude
+              </p>
+            </Reveal>
+            <Reveal delay={100}>
+              <h2 className="text-4xl font-semibold leading-tight tracking-tight text-neutral-900 sm:text-5xl">
+                안전을 최우선으로 설계된
+                <br />
+                대화형 AI 어시스턴트.
+              </h2>
+            </Reveal>
+            <Reveal delay={200}>
+              <p className="mx-auto mt-8 max-w-2xl text-lg font-light leading-relaxed text-neutral-500">
+                Claude는 AI 안전성 연구 기업 <strong className="font-medium text-neutral-700">Anthropic</strong>이
+                만든 AI 어시스턴트입니다. 자연스러운 대화 속에서 질문에 답하고, 글을 쓰고,
+                코드를 만들고, 복잡한 문제를 함께 풀어냅니다. 정직하고 도움이 되며
+                안전한 응답을 지향하도록 세심하게 훈련되었습니다.
+              </p>
+            </Reveal>
+          </div>
+        </Section>
+      );
+    }
+
+    // ========================================
+    // 📄 Features
+    // ========================================
+    function Features() {
+      const items = [
+        {
+          icon: "💬",
+          title: "자연스러운 대화",
+          desc: "맥락을 기억하며 깊이 있게 이어지는 대화. 짧은 질문부터 긴 토론까지 자연스럽게 함께합니다.",
+        },
+        {
+          icon: "✍️",
+          title: "글쓰기",
+          desc: "기획서, 이메일, 카피, 이야기까지. 어조와 목적에 맞춰 다듬어진 문장을 만들어냅니다.",
+        },
+        {
+          icon: "💻",
+          title: "코딩 어시스턴트",
+          desc: "코드 작성과 리뷰, 디버깅, 리팩터링. 여러 언어와 프레임워크를 넘나들며 개발을 돕습니다.",
+        },
+        {
+          icon: "📊",
+          title: "분석과 추론",
+          desc: "긴 문서 요약, 데이터 해석, 단계적 추론. 복잡한 정보를 명료하게 정리합니다.",
+        },
+        {
+          icon: "🛡️",
+          title: "안전성과 신뢰",
+          desc: "Constitutional AI 원칙에 기반해 해롭지 않고 정직한 응답을 지향합니다.",
+        },
+        {
+          icon: "🌏",
+          title: "다국어 이해",
+          desc: "한국어를 포함한 여러 언어를 유창하게 이해하고 자연스럽게 소통합니다.",
+        },
+      ];
+
+      return (
+        <Section id="features">
+          <div className="mb-16 max-w-2xl">
+            <Reveal>
+              <p className="mb-4 text-sm font-semibold uppercase tracking-[0.2em] text-neutral-400">
+                Capabilities
+              </p>
+            </Reveal>
+            <Reveal delay={100}>
+              <h2 className="text-4xl font-semibold leading-tight tracking-tight sm:text-5xl">
+                하나의 어시스턴트,
+                <br />
+                수많은 가능성.
+              </h2>
+            </Reveal>
+          </div>
+
+          <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
+            {items.map((item, i) => (
+              <FeatureCard key={item.title} {...item} delay={(i % 3) * 80} />
+            ))}
+          </div>
+        </Section>
+      );
+    }
+
+    // ========================================
+    // 📄 Models
+    // ========================================
+    function Models() {
+      const models = [
+        {
+          name: "Opus",
+          tagline: "가장 강력한 지능",
+          desc: "가장 복잡하고 어려운 과제를 위한 최상위 모델. 깊은 추론과 정교한 결과가 필요할 때.",
+          accent: "#c96442",
+        },
+        {
+          name: "Sonnet",
+          tagline: "지능과 속도의 균형",
+          desc: "성능과 응답 속도의 이상적인 균형. 일상적인 대부분의 작업에 두루 잘 맞습니다.",
+          accent: "#7c8bd4",
+        },
+        {
+          name: "Haiku",
+          tagline: "가장 빠른 응답",
+          desc: "가볍고 빠른 응답에 최적화된 모델. 즉각적인 상호작용이 중요한 순간에.",
+          accent: "#5fb09a",
+        },
+      ];
+
+      return (
+        <Section id="models" className="bg-neutral-50">
+          <div className="mb-16 max-w-2xl">
+            <Reveal>
+              <p className="mb-4 text-sm font-semibold uppercase tracking-[0.2em] text-neutral-400">
+                Model Family
+              </p>
+            </Reveal>
+            <Reveal delay={100}>
+              <h2 className="text-4xl font-semibold leading-tight tracking-tight sm:text-5xl">
+                필요에 꼭 맞는
+                <br />
+                세 가지 모델.
+              </h2>
+            </Reveal>
+            <Reveal delay={200}>
+              <p className="mt-6 max-w-xl text-lg font-light leading-relaxed text-neutral-500">
+                Claude는 목적에 따라 선택할 수 있는 모델 패밀리를 제공합니다.
+                지능, 속도, 비용의 균형을 자유롭게 맞춰보세요.
+              </p>
+            </Reveal>
+          </div>
+
+          <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
+            {models.map((m, i) => (
+              <ModelCard key={m.name} {...m} delay={i * 100} />
+            ))}
+          </div>
+        </Section>
+      );
+    }
+
+    // ========================================
+    // 📄 Closing
+    // ========================================
+    function Closing() {
+      return (
+        <Section className="bg-white">
+          <div className="mx-auto max-w-3xl text-center">
+            <Reveal>
+              <h2 className="gradient-text text-5xl font-semibold leading-tight tracking-tight sm:text-6xl lg:text-7xl">
+                생각의 속도로,
+                <br />
+                함께.
+              </h2>
+            </Reveal>
+            <Reveal delay={150}>
+              <p className="mx-auto mt-8 max-w-xl text-lg font-light leading-relaxed text-neutral-500">
+                Claude와 함께라면 아이디어는 더 멀리, 작업은 더 가볍게.
+                지금 대화를 시작해보세요.
+              </p>
+            </Reveal>
+          </div>
+        </Section>
+      );
+    }
+
+    // ========================================
+    // 🧩 Footer
+    // ========================================
+    function Footer() {
+      return (
+        <footer className="border-t border-neutral-200 px-6 py-12 sm:px-8">
+          <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-4 sm:flex-row">
+            <p className="text-[13px] text-neutral-400">
+              Claude는 Anthropic이 만든 AI 어시스턴트입니다.
+            </p>
+            <p className="text-[13px] text-neutral-400">
+              이 페이지는 소개용 데모입니다.
+            </p>
+          </div>
+        </footer>
+      );
+    }
+
+    // ========================================
+    // 🚀 App
+    // ========================================
+    function App() {
+      return (
+        <div>
+          <Nav />
+          <main>
+            <Hero />
+            <About />
+            <Features />
+            <Models />
+            <Closing />
+          </main>
+          <Footer />
+        </div>
+      );
+    }
+
+    // ========================================
+    // Render
+    // ========================================
+    ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+  </script>
+</body>
+</html>

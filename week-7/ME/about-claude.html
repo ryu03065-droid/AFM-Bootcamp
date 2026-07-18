@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Claude 소개 — Anthropic의 AI 어시스턴트</title>
+  <script src="https://cdn.tailwindcss.com/3.4.16"></script>
+  <!-- ⚠️ 모든 CDN 버전 고정. Babel 은 7.x (8.x 미지원). -->
+  <script src="https://unpkg.com/react@18.3.1/umd/react.development.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone@7.25.9/babel.min.js"></script>
+  <style>
+    @keyframes floatUp {
+      from { opacity: 0; transform: translateY(16px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    .float-in { animation: floatUp 0.7s ease-out both; }
+    .grain-bg {
+      background:
+        radial-gradient(60% 55% at 50% 0%, rgba(217,119,87,0.14) 0%, rgba(217,119,87,0) 60%),
+        linear-gradient(180deg, #faf7f2 0%, #f5f1ea 100%);
+    }
+  </style>
+</head>
+<body class="antialiased text-stone-800">
+  <div id="root"></div>
+
+  <!-- 🎨 Design System Components -->
+  <script type="text/babel" src="components/Button.js"></script>
+  <script type="text/babel" src="components/Card.js"></script>
+  <script type="text/babel" src="components/Badge.js"></script>
+  <script type="text/babel" src="components/Section.js"></script>
+
+  <!-- 🧩 Layout Components -->
+  <script type="text/babel" src="components/Header.js"></script>
+  <script type="text/babel" src="components/Footer.js"></script>
+
+  <!-- 📄 Content Sections -->
+  <script type="text/babel" src="components/Hero.js"></script>
+  <script type="text/babel" src="components/Features.js"></script>
+  <script type="text/babel" src="components/Models.js"></script>
+  <script type="text/babel" src="components/Values.js"></script>
+  <script type="text/babel" src="components/CTA.js"></script>
+
+  <!-- 🚀 App -->
+  <script type="text/babel" src="components/App.js"></script>
+  <script type="text/babel">
+    ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+  </script>
+</body>
+</html>
