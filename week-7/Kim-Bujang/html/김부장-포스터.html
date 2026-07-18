@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>김부장 · SBS 금토드라마 / NETFLIX — B2 포스터</title>
+<style>
+  /* =========================================================
+     RESET & STAGE
+     ========================================================= */
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  html, body {
+    height: 100%;
+    background: #050506;
+    overflow: hidden;
+    font-family: "Apple SD Gothic Neo", "Pretendard", "Noto Sans KR",
+                 -apple-system, BlinkMacSystemFont, "Malgun Gothic", sans-serif;
+  }
+
+  body {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    /* 무대 배경: 극장 벽 같은 방사형 암부 */
+    background:
+      radial-gradient(120% 90% at 50% 30%, #16161a 0%, #0a0a0c 45%, #030304 100%);
+    padding: 2.2vmin;
+  }
+
+  /* =========================================================
+     POSTER — B2 비율 (515 : 728 ≈ 0.7075 : 1) 고정
+     container-type: size → 내부 요소는 cqw/cqh 로 비례 스케일
+     ========================================================= */
+  .poster {
+    position: relative;
+    aspect-ratio: 515 / 728;
+    height: min(96vh, calc(96vw * 728 / 515));
+    width: auto;
+    max-width: 96vw;
+    container-type: size;
+    overflow: hidden;
+    background: #050506;
+    color: #f4f1ec;
+    box-shadow:
+      0 0 0 1px rgba(255,255,255,0.05),
+      0 3vmin 9vmin rgba(0,0,0,0.85),
+      0 0 14vmin rgba(0,0,0,0.6);
+    isolation: isolate;
+  }
+
+  /* =========================================================
+     HERO 스틸컷 — object-fit cover 크롭, 하단 다크 페이드
+     ========================================================= */
+  .hero {
+    position: absolute;
+    inset: 0 0 auto 0;
+    height: 74%;
+    z-index: 0;
+  }
+  .hero img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    /* 인물 얼굴을 위쪽에, 총구까지 살도록 살짝 우측·상단 크롭 */
+    object-position: 56% 16%;
+    filter: contrast(1.08) saturate(0.72) brightness(0.9);
+  }
+  /* 상단 살짝 어둡게(타이틀바 가독) + 하단은 완전히 다크로 소멸 */
+  .hero::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background:
+      linear-gradient(to bottom,
+        rgba(3,3,4,0.72) 0%,
+        rgba(3,3,4,0.12) 14%,
+        rgba(3,3,4,0.00) 34%,
+        rgba(3,3,4,0.10) 55%,
+        rgba(4,4,6,0.62) 74%,
+        rgba(4,4,6,0.94) 90%,
+        #050506 100%),
+      /* 콜드 블루-그린 느와르 색보정 */
+      linear-gradient(to bottom, rgba(20,32,44,0.28), rgba(30,10,10,0.10));
+    mix-blend-mode: normal;
+  }
+
+  /* 좌우 비네트 (인물 집중) */
+  .vignette {
+    position: absolute;
+    inset: 0;
+    z-index: 3;
+    pointer-events: none;
+    background:
+      radial-gradient(130% 100% at 50% 34%,
+        rgba(0,0,0,0) 52%, rgba(0,0,0,0.35) 82%, rgba(0,0,0,0.7) 100%);
+  }
+
+  /* 필름 그레인 */
+  .grain {
+    position: absolute;
+    inset: 0;
+    z-index: 4;
+    pointer-events: none;
+    opacity: 0.16;
+    mix-blend-mode: overlay;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+    background-size: 34cqw 34cqw;
+  }
+
+  /* =========================================================
+     CONTENT LAYER
+     ========================================================= */
+  .content {
+    position: relative;
+    z-index: 5;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    padding: 4.4cqw 6cqw 4.6cqw;
+  }
+
+  /* 상단 배급/방영 바 */
+  .dist {
+    display: flex;
+    align-items: center;
+    gap: 2.4cqw;
+    font-size: 2.35cqw;
+    letter-spacing: 0.34em;
+    font-weight: 700;
+    color: rgba(244,241,236,0.82);
+    text-transform: uppercase;
+    text-shadow: 0 0.3cqw 1.2cqw rgba(0,0,0,0.8);
+    white-space: nowrap;
+  }
+  .dist .line { flex: 1; height: 1px; background: linear-gradient(90deg, rgba(255,255,255,0.42), rgba(255,255,255,0.02)); }
+  .dist .net { color: #e50914; letter-spacing: 0.28em; }
+  .dist .dot { opacity: 0.5; letter-spacing: 0; }
+
+  /* 하단 타이포 블록을 아래로 밀어냄 */
+  .spacer { flex: 1; }
+
+  /* 장르 키커 */
+  .kicker {
+    font-size: 2.5cqw;
+    letter-spacing: 0.5em;
+    font-weight: 600;
+    color: #c9a25a;
+    text-indent: 0.5em;
+    text-transform: none;
+    margin-bottom: 2.4cqw;
+    text-shadow: 0 0.3cqw 1.4cqw rgba(0,0,0,0.9);
+  }
+  .kicker::before {
+    content: "";
+    display: inline-block;
+    width: 5cqw; height: 1px;
+    background: #c9a25a;
+    vertical-align: middle;
+    margin-right: 2.2cqw;
+    opacity: 0.85;
+  }
+
+  /* 메인 타이틀 */
+  .title {
+    font-size: 27cqw;
+    line-height: 0.82;
+    font-weight: 900;
+    letter-spacing: -0.02em;
+    color: #f7f4ee;
+    text-shadow:
+      0 0.4cqw 0 rgba(0,0,0,0.4),
+      0 1.6cqw 5cqw rgba(0,0,0,0.9),
+      0 0 9cqw rgba(0,0,0,0.6);
+    position: relative;
+    margin-left: -0.6cqw;
+  }
+  /* 타이틀에 미세한 붉은 하이라이트 결 */
+  .title .accent { color: #eceae4; }
+  .title::after {
+    content: "";
+    position: absolute;
+    left: 0.4cqw; bottom: 2cqw;
+    width: 27cqw; height: 0.9cqw;
+    background: linear-gradient(90deg, #e50914 0%, #7a0207 60%, transparent 100%);
+    box-shadow: 0 0 3cqw rgba(229,9,20,0.55);
+  }
+
+  /* 태그라인 */
+  .tagline {
+    margin-top: 4.4cqw;
+    font-size: 4.15cqw;
+    line-height: 1.42;
+    font-weight: 700;
+    color: #efe9df;
+    letter-spacing: -0.01em;
+    text-shadow: 0 0.4cqw 2cqw rgba(0,0,0,0.95);
+    max-width: 80%;
+  }
+  .tagline b { color: #fff; }
+  .tagline .sub {
+    display: block;
+    margin-top: 1.8cqw;
+    font-size: 2.7cqw;
+    font-weight: 500;
+    line-height: 1.5;
+    color: rgba(230,224,214,0.62);
+    letter-spacing: 0.01em;
+  }
+
+  /* 캐스트 라인업 */
+  .cast {
+    margin-top: 5.2cqw;
+    padding-top: 3.4cqw;
+    border-top: 1px solid rgba(255,255,255,0.14);
+    display: flex;
+    flex-wrap: wrap;
+    gap: 3.2cqw 4.4cqw;
+  }
+  .cast .actor {
+    display: flex;
+    flex-direction: column;
+    gap: 0.6cqw;
+  }
+  .cast .name {
+    font-size: 3.5cqw;
+    font-weight: 800;
+    color: #f2ede4;
+    letter-spacing: 0.02em;
+    text-shadow: 0 0.3cqw 1.4cqw rgba(0,0,0,0.9);
+  }
+  .cast .role {
+    font-size: 2.05cqw;
+    font-weight: 500;
+    color: rgba(201,162,90,0.9);
+    letter-spacing: 0.06em;
+  }
+
+  /* 하단 크레딧 */
+  .credits {
+    margin-top: 4.4cqw;
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 3cqw;
+  }
+  .credits .schedule {
+    font-size: 2.55cqw;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    color: rgba(244,241,236,0.9);
+    line-height: 1.5;
+  }
+  .credits .schedule span { color: #c9a25a; }
+  .credits .meta {
+    text-align: right;
+    font-size: 1.9cqw;
+    font-weight: 500;
+    letter-spacing: 0.04em;
+    color: rgba(230,224,214,0.5);
+    line-height: 1.55;
+    white-space: nowrap;
+  }
+  .credits .meta strong { color: rgba(244,241,236,0.82); font-weight: 700; }
+
+  /* 접근성: 화면축소 시에도 비율 유지, 텍스트 선택 가능 */
+  @media (max-height: 400px) {
+    .poster { height: 94vh; }
+  }
+</style>
+</head>
+<body>
+  <!-- =========================================================
+       김부장 B2 포스터 (515 x 728, ≈0.7075:1)
+       ========================================================= -->
+  <main class="poster" role="img"
+        aria-label="드라마 김부장 포스터. 소지섭이 총을 겨누는 액션 스틸컷. SBS 금토드라마, 넷플릭스 동시 스트리밍.">
+
+    <!-- HERO 스틸컷 -->
+    <div class="hero">
+      <img src="../stillcuts/kimbujang-action-daylight-gunfight.png"
+           alt="김부장 역 소지섭, 얼굴에 상처를 입고 권총을 겨누는 모습" />
+    </div>
+
+    <div class="vignette" aria-hidden="true"></div>
+    <div class="grain" aria-hidden="true"></div>
+
+    <!-- CONTENT -->
+    <div class="content">
+
+      <!-- 배급/방영 정보 -->
+      <div class="dist">
+        <span>SBS 금토드라마</span>
+        <span class="dot">·</span>
+        <span class="net">NETFLIX</span>
+        <span>동시 스트리밍</span>
+        <span class="line" aria-hidden="true"></span>
+      </div>
+
+      <div class="spacer"></div>
+
+      <!-- 장르 키커 -->
+      <p class="kicker">아빠 유니버스 코믹 액션 느와르</p>
+
+      <!-- 메인 타이틀 -->
+      <h1 class="title"><span class="accent">김부장</span></h1>
+
+      <!-- 태그라인 -->
+      <p class="tagline">
+        딸을 지키기 위해, <b>봉인했던 아빠의 진짜 얼굴</b>이 깨어난다.
+        <span class="sub">평범한 회계팀 부장은 사실, 세상에서 가장 위험한 남자였다.</span>
+      </p>
+
+      <!-- 캐스트 라인업 -->
+      <div class="cast">
+        <div class="actor"><span class="name">소지섭</span><span class="role">김부장</span></div>
+        <div class="actor"><span class="name">최대훈</span><span class="role">성한수</span></div>
+        <div class="actor"><span class="name">윤경호</span><span class="role">박진철</span></div>
+        <div class="actor"><span class="name">주상욱</span><span class="role">주강찬</span></div>
+        <div class="actor"><span class="name">손나은</span><span class="role">정상아</span></div>
+      </div>
+
+      <!-- 하단 크레딧 -->
+      <div class="credits">
+        <div class="schedule">
+          2026. 6. 26 <span>▸</span> 7. 25<br />
+          매주 금·토 밤 · 전 10부작
+        </div>
+        <div class="meta">
+          원작 웹툰 <strong>정종택</strong><br />
+          연출 이승영·이소은 / 각본 남대중<br />
+          넷플릭스 비영어 부문 <strong>2주 연속 1위</strong>
+        </div>
+      </div>
+
+    </div>
+  </main>
+</body>
+</html>

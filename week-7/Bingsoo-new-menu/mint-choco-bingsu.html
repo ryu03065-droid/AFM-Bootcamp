@@ -1,0 +1,551 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>민초당 · 민트 초코 빙수</title>
+  <script src="https://cdn.tailwindcss.com/3.4.16"></script>
+  <!-- ⚠️ 모든 CDN 버전 고정. Babel 은 반드시 7.x. -->
+  <script src="https://unpkg.com/react@18.3.1/umd/react.development.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone@7.25.9/babel.min.js"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            mint: {
+              50: '#f0fbf7', 100: '#d6f5ea', 200: '#aeead6',
+              300: '#7fdcbf', 400: '#4fc9a5', 500: '#2fb28d',
+              600: '#1f9276', 700: '#1c745f', 800: '#1a5c4d', 900: '#164b40'
+            },
+            choco: {
+              50: '#f7f2ee', 100: '#e8d9cd', 200: '#c9a889',
+              300: '#a2744e', 400: '#7a5334', 500: '#5b3c24',
+              600: '#442c1a', 700: '#332013', 800: '#26180e', 900: '#1a1009'
+            }
+          },
+          fontFamily: {
+            sans: ['"Pretendard"', 'system-ui', 'sans-serif']
+          }
+        }
+      }
+    }
+  </script>
+  <link rel="preconnect" href="https://cdn.jsdelivr.net">
+  <link href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css" rel="stylesheet">
+  <style>
+    html { scroll-behavior: smooth; }
+    @keyframes floaty { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-14px); } }
+    @keyframes floaty-slow { 0%,100% { transform: translateY(0) rotate(-2deg); } 50% { transform: translateY(-20px) rotate(2deg); } }
+    @keyframes spin-slow { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+    @keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+    @keyframes drip { 0% { transform: scaleY(0.6); opacity: .5; } 50% { transform: scaleY(1.1); opacity: 1; } 100% { transform: scaleY(0.6); opacity: .5; } }
+    .anim-float { animation: floaty 5s ease-in-out infinite; }
+    .anim-float-slow { animation: floaty-slow 7s ease-in-out infinite; }
+    .anim-spin-slow { animation: spin-slow 24s linear infinite; }
+    .poster-shine {
+      background: linear-gradient(110deg, transparent 30%, rgba(255,255,255,.18) 50%, transparent 70%);
+      background-size: 200% 100%;
+      animation: shimmer 6s linear infinite;
+    }
+    .text-stroke-choco { -webkit-text-stroke: 2px #26180e; }
+  </style>
+</head>
+<body class="bg-mint-50 text-choco-700 font-sans antialiased">
+  <div id="root"></div>
+
+  <script type="text/babel">
+    // ========================================
+    // React Hooks
+    // ========================================
+    const { useState, useEffect, useRef } = React;
+
+    // ========================================
+    // 🎨 Design System Components
+    // ========================================
+    function Button({ children, variant = "primary", size = "md", className = "", ...props }) {
+      const base = "inline-flex items-center justify-center font-bold rounded-full transition-all duration-200 focus:outline-none focus:ring-4 focus:ring-mint-300/50 active:scale-95";
+      const variants = {
+        primary: "bg-mint-500 text-white hover:bg-mint-600 shadow-lg shadow-mint-500/30",
+        choco: "bg-choco-600 text-mint-100 hover:bg-choco-700 shadow-lg shadow-choco-600/30",
+        ghost: "bg-white/70 text-choco-700 hover:bg-white border-2 border-mint-300",
+        outline: "bg-transparent text-mint-700 border-2 border-mint-500 hover:bg-mint-500 hover:text-white"
+      };
+      const sizes = { sm: "px-4 py-2 text-sm", md: "px-6 py-3 text-base", lg: "px-8 py-4 text-lg" };
+      return (
+        <button className={`${base} ${variants[variant]} ${sizes[size]} ${className}`} {...props}>
+          {children}
+        </button>
+      );
+    }
+
+    function Badge({ children, className = "" }) {
+      return (
+        <span className={`inline-flex items-center gap-1.5 px-4 py-1.5 rounded-full text-sm font-bold tracking-wide ${className}`}>
+          {children}
+        </span>
+      );
+    }
+
+    function Card({ children, className = "" }) {
+      return (
+        <div className={`bg-white rounded-3xl shadow-xl shadow-mint-900/5 ${className}`}>
+          {children}
+        </div>
+      );
+    }
+
+    function SectionTitle({ eyebrow, title, desc, dark = false }) {
+      return (
+        <div className="text-center max-w-2xl mx-auto mb-14">
+          {eyebrow && (
+            <Badge className={dark ? "bg-mint-500/20 text-mint-300" : "bg-mint-100 text-mint-700"}>
+              <span className="w-1.5 h-1.5 rounded-full bg-current"></span>{eyebrow}
+            </Badge>
+          )}
+          <h2 className={`mt-4 text-3xl md:text-4xl font-extrabold tracking-tight ${dark ? "text-white" : "text-choco-700"}`}>{title}</h2>
+          {desc && <p className={`mt-4 text-base md:text-lg leading-relaxed ${dark ? "text-mint-200/80" : "text-choco-300"}`}>{desc}</p>}
+        </div>
+      );
+    }
+
+    // ========================================
+    // 🧩 Navigation
+    // ========================================
+    function Navbar() {
+      const [scrolled, setScrolled] = useState(false);
+      const [open, setOpen] = useState(false);
+      useEffect(() => {
+        const onScroll = () => setScrolled(window.scrollY > 20);
+        window.addEventListener("scroll", onScroll);
+        return () => window.removeEventListener("scroll", onScroll);
+      }, []);
+      const links = [
+        { href: "#menu", label: "신메뉴" },
+        { href: "#poster", label: "포스터" },
+        { href: "#about", label: "가게 소개" },
+        { href: "#others", label: "다른 메뉴" },
+        { href: "#visit", label: "오시는 길" },
+      ];
+      return (
+        <header className={`fixed top-0 inset-x-0 z-50 transition-all duration-300 ${scrolled ? "bg-mint-50/90 backdrop-blur-md shadow-md shadow-mint-900/5" : "bg-transparent"}`}>
+          <nav className="max-w-6xl mx-auto px-5 h-16 flex items-center justify-between">
+            <a href="#top" className="flex items-center gap-2 font-extrabold text-lg text-choco-700">
+              <span className="w-9 h-9 rounded-full bg-mint-500 text-white grid place-items-center text-xl">🍧</span>
+              민초당
+            </a>
+            <ul className="hidden md:flex items-center gap-7 text-sm font-semibold text-choco-500">
+              {links.map(l => (
+                <li key={l.href}><a href={l.href} className="hover:text-mint-600 transition-colors">{l.label}</a></li>
+              ))}
+            </ul>
+            <div className="hidden md:block">
+              <Button href="#menu" size="sm" onClick={() => document.getElementById('menu').scrollIntoView()}>주문하기</Button>
+            </div>
+            <button className="md:hidden text-choco-700 p-2" onClick={() => setOpen(!open)} aria-label="메뉴 열기">
+              <svg width="26" height="26" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                {open ? <path d="M6 6l12 12M18 6L6 18"/> : <path d="M4 7h16M4 12h16M4 17h16"/>}
+              </svg>
+            </button>
+          </nav>
+          {open && (
+            <div className="md:hidden bg-mint-50/95 backdrop-blur border-t border-mint-100 px-5 py-4">
+              <ul className="flex flex-col gap-3 text-choco-600 font-semibold">
+                {links.map(l => (
+                  <li key={l.href}><a href={l.href} onClick={() => setOpen(false)} className="block py-1">{l.label}</a></li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </header>
+      );
+    }
+
+    // ========================================
+    // 📄 Hero Section
+    // ========================================
+    function Hero() {
+      return (
+        <section id="top" className="relative overflow-hidden pt-28 pb-20 md:pt-36 md:pb-28">
+          {/* 배경 데코 */}
+          <div className="absolute inset-0 -z-10">
+            <div className="absolute inset-0 bg-gradient-to-b from-mint-100 via-mint-50 to-mint-50"></div>
+            <div className="absolute -top-24 -left-24 w-96 h-96 rounded-full bg-mint-300/30 blur-3xl"></div>
+            <div className="absolute top-40 -right-20 w-80 h-80 rounded-full bg-choco-200/30 blur-3xl"></div>
+          </div>
+          <div className="max-w-6xl mx-auto px-5 grid md:grid-cols-2 gap-10 items-center">
+            <div className="text-center md:text-left">
+              <Badge className="bg-choco-600 text-mint-200">
+                <span>🌿</span> 여름 한정 신메뉴 오픈
+              </Badge>
+              <h1 className="mt-5 text-4xl sm:text-5xl md:text-6xl font-extrabold leading-[1.1] tracking-tight text-choco-700">
+                시원하게 <span className="text-mint-500">민트</span>,<br/>
+                진하게 <span className="text-choco-500">초코</span>.
+              </h1>
+              <p className="mt-5 text-lg text-choco-400 max-w-md mx-auto md:mx-0 leading-relaxed">
+                입안 가득 퍼지는 상쾌한 민트와 벨기에 초콜릿의 완벽한 조화.
+                민초당의 새로운 시그니처, <b className="text-choco-600">민트 초코 빙수</b>를 만나보세요.
+              </p>
+              <div className="mt-8 flex flex-wrap gap-3 justify-center md:justify-start">
+                <Button size="lg" onClick={() => document.getElementById('menu').scrollIntoView()}>신메뉴 보러가기</Button>
+                <Button size="lg" variant="ghost" onClick={() => document.getElementById('poster').scrollIntoView()}>홍보 포스터 보기</Button>
+              </div>
+              <div className="mt-8 flex items-center gap-6 justify-center md:justify-start text-sm text-choco-400">
+                <div><span className="block text-2xl font-extrabold text-mint-600">4.9</span>고객 평점</div>
+                <div className="w-px h-8 bg-mint-200"></div>
+                <div><span className="block text-2xl font-extrabold text-mint-600">1,200+</span>단골 손님</div>
+                <div className="w-px h-8 bg-mint-200"></div>
+                <div><span className="block text-2xl font-extrabold text-mint-600">100%</span>수제 팥·시럽</div>
+              </div>
+            </div>
+            <div className="relative">
+              <div className="absolute inset-6 rounded-[3rem] bg-white/50 backdrop-blur-sm rotate-6 anim-spin-slow"></div>
+              <div className="relative anim-float">
+                <img src="images/mint-choco-bingsu-recraft-v3.png" alt="민트 초코 빙수"
+                     className="w-full max-w-md aspect-square object-cover mx-auto rounded-[2.5rem] shadow-2xl ring-4 ring-white/70" />
+              </div>
+            </div>
+          </div>
+        </section>
+      );
+    }
+
+    // ========================================
+    // 📄 신메뉴 소개 Section
+    // ========================================
+    function NewMenu() {
+      const highlights = [
+        { icon: "🌿", t: "리얼 페퍼민트", d: "천연 페퍼민트 추출액으로 인공적이지 않은 상쾌함" },
+        { icon: "🍫", t: "벨기에 다크초코", d: "카카오 70% 다크 초콜릿 시럽을 아낌없이 드리즐" },
+        { icon: "❄️", t: "눈꽃 우유 얼음", d: "곱게 갈아낸 우유 얼음이 입에서 사르르 녹아요" },
+        { icon: "🍪", t: "수제 초코칩", d: "매일 아침 직접 만든 바삭한 초코칩 토핑" },
+      ];
+      return (
+        <section id="menu" className="py-20 md:py-28">
+          <div className="max-w-6xl mx-auto px-5">
+            <SectionTitle eyebrow="NEW MENU" title="민트 초코 빙수"
+              desc="민초당이 두 달간 연구한 여름 시그니처. 상쾌함과 달콤함의 황금 비율을 찾았습니다." />
+            <Card className="overflow-hidden">
+              <div className="grid md:grid-cols-2">
+                {/* 비주얼 */}
+                <div className="relative bg-gradient-to-br from-mint-100 to-mint-200 p-8 md:p-12 flex items-center justify-center">
+                  <div className="absolute top-5 left-5">
+                    <Badge className="bg-white text-mint-700 shadow">🔥 BEST</Badge>
+                  </div>
+                  <img src="images/mint-choco-bingsu-recraft-v3.png" alt="민트 초코 빙수"
+                       className="w-72 aspect-square object-cover rounded-3xl shadow-xl anim-float" />
+                </div>
+                {/* 정보 */}
+                <div className="p-8 md:p-12">
+                  <div className="flex items-center gap-2 text-mint-500 mb-3">
+                    {"★★★★★".split("").map((s,i) => <span key={i}>{s}</span>)}
+                    <span className="text-choco-300 text-sm ml-1">(4.9 · 리뷰 312)</span>
+                  </div>
+                  <h3 className="text-3xl font-extrabold text-choco-700">민트 초코 빙수</h3>
+                  <p className="mt-4 text-choco-400 leading-relaxed">
+                    곱게 갈아낸 우유 눈꽃 얼음 위에 시원한 민트 아이스크림을 얹고,
+                    진한 벨기에 다크 초코 시럽과 수제 초코칩을 듬뿍. 한 입 먹으면
+                    입안이 상쾌해지고, 씹을수록 초콜릿의 깊은 단맛이 퍼집니다.
+                    더위를 싹 날려버릴 여름 필수템!
+                  </p>
+                  <div className="mt-6 flex items-baseline gap-3">
+                    <span className="text-4xl font-extrabold text-mint-600">9,800원</span>
+                    <span className="text-lg text-choco-200 line-through">12,000원</span>
+                    <Badge className="bg-choco-100 text-choco-500">오픈 기념 18% 할인</Badge>
+                  </div>
+                  <div className="mt-4 flex flex-wrap gap-2 text-sm">
+                    {["1~2인용", "약 600g", "국산 우유", "당일 제조"].map(t => (
+                      <span key={t} className="px-3 py-1 rounded-full bg-mint-50 text-mint-700 font-semibold border border-mint-100">{t}</span>
+                    ))}
+                  </div>
+                  <div className="mt-8 flex gap-3">
+                    <Button size="lg" variant="choco" className="flex-1">🛒 주문하기</Button>
+                    <Button size="lg" variant="outline">찜하기</Button>
+                  </div>
+                </div>
+              </div>
+            </Card>
+
+            {/* 하이라이트 */}
+            <div className="mt-10 grid sm:grid-cols-2 lg:grid-cols-4 gap-5">
+              {highlights.map(h => (
+                <Card key={h.t} className="p-6 hover:-translate-y-1 transition-transform">
+                  <div className="w-14 h-14 rounded-2xl bg-mint-100 grid place-items-center text-3xl">{h.icon}</div>
+                  <h4 className="mt-4 font-extrabold text-choco-700">{h.t}</h4>
+                  <p className="mt-2 text-sm text-choco-400 leading-relaxed">{h.d}</p>
+                </Card>
+              ))}
+            </div>
+          </div>
+        </section>
+      );
+    }
+
+    // ========================================
+    // 📄 홍보 포스터 Section
+    //    ⭐ 빙수 일러스트가 포스터 정중앙에 위치
+    // ========================================
+    function PosterSection() {
+      return (
+        <section id="poster" className="py-20 md:py-28 bg-mint-50">
+          <div className="max-w-6xl mx-auto px-5">
+            <SectionTitle eyebrow="PROMOTION POSTER" title="신메뉴 홍보 포스터"
+              desc="매장과 SNS에 게시되는 민트 초코 빙수 공식 포스터입니다." />
+
+            <div className="flex justify-center">
+              {/* 포스터 프레임 (세로형) */}
+              <div className="relative w-full max-w-md aspect-[3/4] rounded-3xl overflow-hidden shadow-2xl shadow-choco-900/30 ring-1 ring-choco-900/10">
+                {/* 배경: 민트→초코 그라데이션 */}
+                <div className="absolute inset-0 bg-gradient-to-b from-mint-400 via-mint-500 to-choco-600"></div>
+                {/* 배경 데코 도트/원 */}
+                <div className="absolute inset-0 opacity-30"
+                     style={{ backgroundImage: "radial-gradient(circle, #ffffff 1.5px, transparent 1.5px)", backgroundSize: "22px 22px" }}></div>
+                <div className="absolute -top-10 -right-10 w-48 h-48 rounded-full bg-white/10"></div>
+                <div className="absolute bottom-24 -left-12 w-40 h-40 rounded-full bg-choco-700/30 blur-md"></div>
+                {/* 빛 반사 애니메이션 오버레이 */}
+                <div className="absolute inset-0 poster-shine pointer-events-none"></div>
+
+                {/* 포스터 콘텐츠 (3단 세로 구성) */}
+                <div className="relative h-full flex flex-col items-center justify-between text-center px-6 py-8 text-white">
+                  {/* 상단 카피 */}
+                  <div>
+                    <Badge className="bg-white/20 backdrop-blur text-white border border-white/30">🌿 SUMMER LIMITED 🍫</Badge>
+                    <h3 className="mt-3 text-2xl font-extrabold tracking-tight drop-shadow">민초당 신메뉴</h3>
+                    <p className="text-mint-100/90 text-sm mt-1">더위를 녹이는 상쾌한 한 입</p>
+                  </div>
+
+                  {/* ⭐ 정중앙: 빙수 일러스트 */}
+                  <div className="flex-1 w-full flex items-center justify-center py-2">
+                    <div className="relative">
+                      {/* 뒤 후광 */}
+                      <div className="absolute inset-0 -m-6 rounded-full bg-white/20 blur-2xl"></div>
+                      <div className="absolute inset-0 -m-2 rounded-full border-2 border-dashed border-white/40 anim-spin-slow"></div>
+                      <img src="images/mint-choco-bingsu-recraft-v3.png" alt="민트 초코 빙수"
+                           className="relative w-60 sm:w-64 aspect-square object-cover rounded-full ring-4 ring-white/60 shadow-2xl anim-float" />
+                    </div>
+                  </div>
+
+                  {/* 하단 타이틀 + 가격 */}
+                  <div className="w-full">
+                    <h2 className="text-4xl sm:text-5xl font-black leading-none tracking-tight"
+                        style={{ textShadow: "0 3px 0 rgba(38,24,14,.35)" }}>
+                      민트 초코<br/>빙수
+                    </h2>
+                    <div className="mt-4 inline-flex items-center gap-2 bg-white text-choco-700 px-5 py-2 rounded-full font-extrabold shadow-lg">
+                      <span className="text-mint-500 text-sm line-through opacity-60">12,000</span>
+                      <span className="text-2xl">9,800원</span>
+                    </div>
+                    <p className="mt-3 text-xs text-mint-100/80 tracking-wide">
+                      민초당 · 서울 성수동 본점 | 매일 11:00 – 22:00
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <p className="text-center text-sm text-choco-300 mt-8">
+              💡 포스터 중앙의 빙수 일러스트는 SVG로 직접 그려 어떤 화면에서도 선명하게 표시됩니다.
+            </p>
+          </div>
+        </section>
+      );
+    }
+
+    // ========================================
+    // 📄 가게 소개 Section
+    // ========================================
+    function About() {
+      return (
+        <section id="about" className="py-20 md:py-28 bg-choco-700 text-white relative overflow-hidden">
+          <div className="absolute -top-20 right-10 w-72 h-72 rounded-full bg-mint-500/20 blur-3xl"></div>
+          <div className="max-w-6xl mx-auto px-5 grid md:grid-cols-2 gap-12 items-center relative">
+            <div>
+              <Badge className="bg-mint-500/20 text-mint-300">🍧 ABOUT 민초당</Badge>
+              <h2 className="mt-4 text-3xl md:text-4xl font-extrabold leading-tight">
+                민트초코를 사랑하는 사람들이<br/>만드는 작은 빙수집
+              </h2>
+              <p className="mt-5 text-mint-200/80 leading-relaxed">
+                2021년 성수동 골목에서 시작한 민초당은 "호불호가 갈리는 민트초코,
+                한 번 먹으면 빠져나올 수 없게 만들자"는 마음으로 문을 열었습니다.
+                국산 우유로 만든 눈꽃 얼음, 매일 아침 손수 만드는 초코칩과 시럽까지 —
+                재료 하나하나에 진심을 담습니다.
+              </p>
+              <div className="mt-8 grid grid-cols-3 gap-4">
+                {[["2021","오픈 연도"],["12종","빙수 메뉴"],["매일","수제 제조"]].map(([n,l]) => (
+                  <div key={l} className="bg-white/5 rounded-2xl p-4 text-center border border-white/10">
+                    <div className="text-2xl font-extrabold text-mint-300">{n}</div>
+                    <div className="text-xs text-mint-200/70 mt-1">{l}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              {[
+                { e:"🌿", t:"천연 재료", d:"인공 향료 없이 천연 페퍼민트만" },
+                { e:"🥛", t:"국산 우유", d:"매일 들여오는 신선한 우유 얼음" },
+                { e:"👩‍🍳", t:"수제 고집", d:"초코칩·시럽 전부 매장 제조" },
+                { e:"♻️", t:"착한 포장", d:"친환경 용기와 나무 스푼 사용" },
+              ].map(c => (
+                <div key={c.t} className="bg-white/5 rounded-3xl p-6 border border-white/10 hover:bg-white/10 transition-colors">
+                  <div className="text-4xl">{c.e}</div>
+                  <h4 className="mt-3 font-extrabold text-mint-100">{c.t}</h4>
+                  <p className="mt-1 text-sm text-mint-200/70 leading-relaxed">{c.d}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+      );
+    }
+
+    // ========================================
+    // 📄 다른 메뉴 Section
+    // ========================================
+    function OtherMenus() {
+      const menus = [
+        { emoji:"🍓", name:"딸기 우유 빙수", price:"10,500원", desc:"국산 설향 딸기가 듬뿍", tag:"인기" },
+        { emoji:"🫘", name:"흑임자 인절미 빙수", price:"9,500원", desc:"고소한 흑임자와 쫀득 인절미", tag:"" },
+        { emoji:"🥭", name:"망고 치즈 빙수", price:"11,000원", desc:"애플망고와 크림치즈 무스", tag:"" },
+        { emoji:"☕", name:"아인슈페너 빙수", price:"9,800원", desc:"진한 에스프레소와 크림", tag:"신규" },
+        { emoji:"🍵", name:"우지말차 빙수", price:"10,000원", desc:"교토산 말차의 깊은 풍미", tag:"" },
+        { emoji:"🍫", name:"더블 초콜릿 빙수", price:"10,800원", desc:"민초 러버라면 다음은 이것", tag:"추천" },
+      ];
+      return (
+        <section id="others" className="py-20 md:py-28">
+          <div className="max-w-6xl mx-auto px-5">
+            <SectionTitle eyebrow="MORE MENU" title="다른 인기 빙수도 만나보세요"
+              desc="민트 초코 빙수 외에도 계절마다 다양한 빙수를 준비하고 있어요." />
+            <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
+              {menus.map(m => (
+                <Card key={m.name} className="p-6 flex items-center gap-4 hover:-translate-y-1 transition-transform">
+                  <div className="w-16 h-16 shrink-0 rounded-2xl bg-mint-100 grid place-items-center text-4xl">{m.emoji}</div>
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2">
+                      <h4 className="font-extrabold text-choco-700">{m.name}</h4>
+                      {m.tag && <Badge className="bg-mint-500 text-white !px-2 !py-0.5 !text-xs">{m.tag}</Badge>}
+                    </div>
+                    <p className="text-sm text-choco-400 mt-1">{m.desc}</p>
+                    <p className="text-mint-600 font-extrabold mt-2">{m.price}</p>
+                  </div>
+                </Card>
+              ))}
+            </div>
+          </div>
+        </section>
+      );
+    }
+
+    // ========================================
+    // 📄 위치 / 영업시간 Section
+    // ========================================
+    function Visit() {
+      const hours = [
+        ["월 – 금", "11:00 – 22:00"],
+        ["토 · 일", "11:00 – 23:00"],
+        ["공휴일", "11:00 – 22:00"],
+      ];
+      return (
+        <section id="visit" className="py-20 md:py-28 bg-mint-100">
+          <div className="max-w-6xl mx-auto px-5">
+            <SectionTitle eyebrow="VISIT US" title="오시는 길 · 영업시간"
+              desc="성수동 카페 거리 중심, 민초당 본점에서 기다릴게요." />
+            <div className="grid md:grid-cols-2 gap-6">
+              {/* 지도 대체 비주얼 */}
+              <Card className="overflow-hidden">
+                <div className="relative h-64 md:h-full min-h-[16rem] bg-gradient-to-br from-mint-200 to-mint-400 grid place-items-center">
+                  <div className="absolute inset-0 opacity-20"
+                       style={{ backgroundImage: "linear-gradient(#fff 1px, transparent 1px), linear-gradient(90deg, #fff 1px, transparent 1px)", backgroundSize: "30px 30px" }}></div>
+                  <div className="relative text-center">
+                    <div className="text-5xl animate-bounce">📍</div>
+                    <p className="mt-2 font-extrabold text-choco-700">민초당 성수 본점</p>
+                    <p className="text-sm text-choco-500">서울 성동구 연무장길 00</p>
+                  </div>
+                </div>
+              </Card>
+              {/* 정보 */}
+              <div className="space-y-5">
+                <Card className="p-6">
+                  <h4 className="font-extrabold text-choco-700 flex items-center gap-2"><span>🕐</span> 영업시간</h4>
+                  <ul className="mt-4 space-y-2">
+                    {hours.map(([d,t]) => (
+                      <li key={d} className="flex justify-between text-sm border-b border-mint-50 pb-2 last:border-0">
+                        <span className="text-choco-400 font-semibold">{d}</span>
+                        <span className="text-choco-700 font-bold">{t}</span>
+                      </li>
+                    ))}
+                  </ul>
+                  <p className="mt-3 text-xs text-choco-300">* 브레이크타임 없음 · 라스트오더 마감 30분 전</p>
+                </Card>
+                <Card className="p-6 space-y-3">
+                  <div className="flex items-center gap-3">
+                    <span className="w-10 h-10 rounded-xl bg-mint-100 grid place-items-center">📞</span>
+                    <div><p className="text-xs text-choco-300">전화 주문</p><p className="font-bold text-choco-700">02-1234-5678</p></div>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <span className="w-10 h-10 rounded-xl bg-mint-100 grid place-items-center">🚇</span>
+                    <div><p className="text-xs text-choco-300">가까운 역</p><p className="font-bold text-choco-700">2호선 성수역 3번 출구 도보 5분</p></div>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <span className="w-10 h-10 rounded-xl bg-mint-100 grid place-items-center">📷</span>
+                    <div><p className="text-xs text-choco-300">인스타그램</p><p className="font-bold text-choco-700">@mincho_dang</p></div>
+                  </div>
+                </Card>
+              </div>
+            </div>
+          </div>
+        </section>
+      );
+    }
+
+    // ========================================
+    // 🧩 Footer
+    // ========================================
+    function Footer() {
+      return (
+        <footer className="bg-choco-800 text-mint-200/70 py-12">
+          <div className="max-w-6xl mx-auto px-5 flex flex-col md:flex-row justify-between items-center gap-6">
+            <div className="text-center md:text-left">
+              <div className="flex items-center gap-2 font-extrabold text-lg text-white justify-center md:justify-start">
+                <span className="w-8 h-8 rounded-full bg-mint-500 grid place-items-center">🍧</span> 민초당
+              </div>
+              <p className="mt-2 text-sm">민트초코를 사랑하는 사람들의 빙수집</p>
+            </div>
+            <div className="flex gap-4 text-sm">
+              <a href="#menu" className="hover:text-mint-300">신메뉴</a>
+              <a href="#poster" className="hover:text-mint-300">포스터</a>
+              <a href="#about" className="hover:text-mint-300">소개</a>
+              <a href="#visit" className="hover:text-mint-300">오시는 길</a>
+            </div>
+          </div>
+          <div className="max-w-6xl mx-auto px-5 mt-8 pt-6 border-t border-white/10 text-center text-xs">
+            © 2026 민초당 (Mincho-dang). All rights reserved. · 서울 성동구 연무장길 00
+          </div>
+        </footer>
+      );
+    }
+
+    // ========================================
+    // 🚀 App
+    // ========================================
+    function App() {
+      return (
+        <div className="overflow-x-hidden">
+          <Navbar />
+          <main>
+            <Hero />
+            <NewMenu />
+            <PosterSection />
+            <About />
+            <OtherMenus />
+            <Visit />
+          </main>
+          <Footer />
+        </div>
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+  </script>
+</body>
+</html>

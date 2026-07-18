@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>김부장 · B2 포스터</title>
+
+  <!-- ⚠️ 모든 CDN 버전 고정. Babel 은 7.x 로 핀 (8.x 는 text/babel 인라인 변환 깨짐) -->
+  <script src="https://cdn.tailwindcss.com/3.4.16"></script>
+  <script src="https://unpkg.com/react@18.3.1/umd/react.development.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone@7.25.9/babel.min.js"></script>
+
+  <!-- 두껍고 포스터에 어울리는 무료 한글 폰트 -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Black+Han+Sans&family=Do+Hyeon&family=Noto+Sans+KR:wght@300;400;500;700&display=swap" rel="stylesheet">
+
+  <style>
+    :root { color-scheme: dark; }
+
+    html, body {
+      margin: 0;
+      background: #17181a;
+      /* 포스터 감상용 중성 뷰어 배경 */
+      background:
+        radial-gradient(120% 90% at 50% 0%, #2a2c30 0%, #1a1b1d 45%, #101012 100%);
+      min-height: 100%;
+    }
+
+    .font-title  { font-family: 'Black Han Sans', sans-serif; }
+    .font-head   { font-family: 'Do Hyeon', sans-serif; }
+    .font-body   { font-family: 'Noto Sans KR', sans-serif; }
+
+    /* ============================================================
+       B2 포스터 프레임 : 515 x 728 mm (비율 0.7075 : 1)
+       container-type 로 내부 타이포를 포스터 폭(cqw)에 비례 스케일
+       ============================================================ */
+    .poster {
+      aspect-ratio: 515 / 728;
+      height: min(96vh, 1180px);
+      max-width: 96vw;
+      container-type: inline-size;
+      position: relative;
+      overflow: hidden;
+      background: #0a0b0d;
+      box-shadow:
+        0 2px 4px rgba(0,0,0,.5),
+        0 30px 70px -20px rgba(0,0,0,.85),
+        0 0 0 1px rgba(255,255,255,.04);
+    }
+
+    /* 메인 스틸컷 : 차가운 느와르 톤으로 그레이딩 */
+    .hero-img {
+      position: absolute; inset: 0;
+      width: 100%; height: 100%;
+      object-fit: cover;
+      object-position: 52% 22%;
+      filter: contrast(1.18) brightness(.74) saturate(.62) grayscale(.18);
+      transform: scale(1.02);
+    }
+
+    /* 듀오톤/틴트 : 블루-그린 냉기 오버레이 */
+    .grade-tint {
+      position: absolute; inset: 0;
+      background:
+        linear-gradient(180deg, rgba(20,40,55,.55) 0%, rgba(15,30,42,.30) 35%, rgba(8,14,20,.55) 100%);
+      mix-blend-mode: color;
+      opacity: .9;
+    }
+    .grade-mult {
+      position: absolute; inset: 0;
+      background:
+        radial-gradient(90% 65% at 50% 30%, rgba(0,0,0,0) 40%, rgba(4,8,12,.55) 100%),
+        linear-gradient(180deg, rgba(6,10,14,.35) 0%, rgba(6,10,14,0) 22%);
+      mix-blend-mode: multiply;
+    }
+
+    /* 하단으로 갈수록 완전한 블랙 : 타이포 가독 확보 */
+    .fade-bottom {
+      position: absolute; inset: 0;
+      background: linear-gradient(180deg,
+        rgba(6,8,11,0) 34%,
+        rgba(6,8,11,.35) 52%,
+        rgba(6,8,11,.82) 70%,
+        rgba(4,6,9,.97) 86%,
+        #040609 100%);
+    }
+    /* 상단 살짝 어둡게 + 좌우 비네트 */
+    .vignette {
+      position: absolute; inset: 0;
+      background:
+        linear-gradient(180deg, rgba(4,6,9,.75) 0%, rgba(4,6,9,0) 16%),
+        radial-gradient(120% 100% at 50% 42%, rgba(0,0,0,0) 55%, rgba(0,0,0,.6) 100%);
+      pointer-events: none;
+    }
+
+    /* 필름 그레인 */
+    .grain {
+      position: absolute; inset: -50%;
+      width: 200%; height: 200%;
+      background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='140' height='140'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix type='saturate' values='0'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");
+      opacity: .07;
+      mix-blend-mode: overlay;
+      pointer-events: none;
+    }
+
+    /* ===== 타이포 스케일 (cqw = 포스터 폭 기준) ===== */
+    .kicker     { font-size: 2.15cqw; letter-spacing: .42em; }
+    .genre      { font-size: 2.35cqw; letter-spacing: .30em; }
+    .title-kr   {
+      font-size: 30cqw;
+      line-height: .84;
+      letter-spacing: -.02em;
+      text-shadow:
+        0 .4cqw 1.2cqw rgba(0,0,0,.85),
+        0 0 6cqw rgba(0,0,0,.6),
+        0 0 2cqw rgba(150,20,20,.25);
+    }
+    .tagline    { font-size: 5.4cqw; line-height: 1.16; letter-spacing: -.01em; }
+    .tagline-em { color: #e7c26a; }
+    .cast       { font-size: 3.05cqw; letter-spacing: .04em; }
+    .cast-name  { font-size: 2.55cqw; }
+    .staff      { font-size: 1.9cqw; letter-spacing: .02em; }
+    .datebar    { font-size: 2.3cqw; letter-spacing: .12em; }
+    .netflix    { font-size: 2.5cqw; letter-spacing: .34em; color: #e50914; }
+    .thumb-lbl  { font-size: 1.55cqw; letter-spacing: .28em; }
+
+    .rule { height: 1px; background: linear-gradient(90deg, transparent, rgba(255,255,255,.30), transparent); }
+
+    /* 필름스트립 썸네일 : 워터마크(상단) 잘라내기 위해 하단 정렬 크롭 */
+    .thumb { filter: contrast(1.12) brightness(.72) saturate(.5) grayscale(.25); }
+    .thumb-tint {
+      position:absolute; inset:0;
+      background: linear-gradient(180deg, rgba(18,42,56,.35), rgba(6,12,18,.55));
+      mix-blend-mode: color;
+    }
+
+    .accent-bar { background: #e50914; }
+  </style>
+</head>
+<body class="font-body text-white antialiased flex items-center justify-center min-h-screen p-4">
+  <div id="root"></div>
+
+  <script type="text/babel">
+    // ========================================================
+    // React Hooks
+    // ========================================================
+    const { useState } = React;
+
+    // ========================================================
+    // 🎨 Design System — 작은 프레젠테이션 조각들
+    // ========================================================
+
+    // 점 구분 장르 라인
+    function Dot() {
+      return <span className="mx-[0.9cqw] text-[#e50914] align-middle">•</span>;
+    }
+
+    // 필름스트립 썸네일 (상단 워터마크는 object-position 으로 크롭)
+    function Thumb({ src, pos = "center 62%" }) {
+      return (
+        <div className="relative flex-1 overflow-hidden"
+             style={{ aspectRatio: "4 / 3", boxShadow: "inset 0 0 0 1px rgba(255,255,255,.06)" }}>
+          <img src={src} alt="" className="thumb absolute inset-0 w-full h-full object-cover"
+               style={{ objectPosition: pos, transform: "scale(1.12)" }} />
+          <div className="thumb-tint" />
+        </div>
+      );
+    }
+
+    // ========================================================
+    // 📄 Poster — 포스터 본체
+    // ========================================================
+    function Poster() {
+      return (
+        <div className="poster select-none">
+
+          {/* ---- 메인 비주얼 & 그레이딩 스택 ---- */}
+          <img className="hero-img" src="../stillcuts/kimbujang-action-daylight-gunfight.png" alt="김부장 메인 스틸" />
+          <div className="grade-tint" />
+          <div className="grade-mult" />
+          <div className="vignette" />
+          <div className="fade-bottom" />
+          <div className="grain" />
+
+          {/* ---- 콘텐츠 레이어 ---- */}
+          <div className="absolute inset-0 flex flex-col justify-between"
+               style={{ padding: "5cqw 5.5cqw 4.6cqw" }}>
+
+            {/* 상단 : 채널 / OTT */}
+            <div>
+              <div className="flex items-center justify-between">
+                <span className="kicker font-head text-white/85">SBS 금토드라마</span>
+                <span className="netflix font-title">NETFLIX</span>
+              </div>
+              <div className="rule mt-[2cqw]" />
+            </div>
+
+            {/* 하단 : 장르 · 타이틀 · 카피 · 필름스트립 · 크레딧 */}
+            <div>
+              {/* 장르 */}
+              <div className="genre font-head text-white/80 mb-[2.4cqw]">
+                코미디<Dot/>액션<Dot/>느와르<Dot/>스릴러
+              </div>
+
+              {/* 타이틀 */}
+              <h1 className="title-kr font-title text-white"
+                  style={{ marginBottom: "1cqw" }}>김부장</h1>
+
+              {/* 붉은 악센트 + 카피 */}
+              <div className="flex items-stretch gap-[2.4cqw] mt-[2.6cqw] mb-[4cqw]">
+                <div className="accent-bar" style={{ width: "0.9cqw", borderRadius: "1px" }} />
+                <p className="tagline font-head text-white/95">
+                  가장 평범한 <span className="tagline-em">아빠</span>,<br/>
+                  세상에서 가장 위험한 <span className="tagline-em">남자</span>가 된다
+                </p>
+              </div>
+
+              {/* 필름스트립 : 코믹 액션 느와르 */}
+              <div className="mb-[4cqw]">
+                <div className="thumb-lbl font-body text-white/45 mb-[1.4cqw]">A DAD-UNIVERSE ACTION NOIR</div>
+                <div className="flex gap-[1cqw]">
+                  <Thumb src="../stillcuts/kimbujang-action-knifefight-closeup.png" pos="46% 40%" />
+                  <Thumb src="../stillcuts/kimbujang-choidaehoon-dobok-flying-kick.png" pos="center 70%" />
+                  <Thumb src="../stillcuts/kimbujang-sojisub-driving-nightscene.png" pos="center 42%" />
+                </div>
+              </div>
+
+              {/* 크레딧 */}
+              <div className="rule mb-[3cqw] opacity-70" />
+
+              <div className="cast font-head text-white flex flex-wrap items-baseline gap-x-[2.6cqw] gap-y-[0.6cqw] mb-[2cqw]">
+                <span>소지섭</span><span>최대훈</span><span>윤경호</span><span>주상욱</span><span>손나은</span>
+              </div>
+
+              <p className="staff font-body text-white/55 leading-relaxed mb-[3.6cqw]">
+                연출 이승영 · 이소은 &nbsp;|&nbsp; 극본 남대중 &nbsp;|&nbsp; 원작 정종택 웹툰 「김부장」
+              </p>
+
+              {/* 방영 정보 바 */}
+              <div className="flex items-center justify-between border-t border-b border-white/15"
+                   style={{ paddingTop: "2.4cqw", paddingBottom: "2.4cqw" }}>
+                <div className="datebar font-head text-white">
+                  2026 <span className="text-[#e50914]">06.26</span> 첫 방송
+                </div>
+                <div className="datebar font-body text-white/70" style={{ letterSpacing: ".08em" }}>
+                  매주 금·토 밤 10시 · 전 10부작
+                </div>
+              </div>
+
+              <div className="thumb-lbl font-body text-white/40 mt-[2.6cqw] text-center">
+                SBS 금토드라마 &nbsp;·&nbsp; NETFLIX 동시 스트리밍
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // ========================================================
+    // 🚀 App
+    // ========================================================
+    function App() {
+      return <Poster />;
+    }
+
+    ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+  </script>
+</body>
+</html>
